@@ -89,21 +89,6 @@ export default function AttendancePage() {
         <h1 className="text-h4 font-semibold">Staff Management</h1>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-6 mb-6 border-b border-gray-800">
-        <button
-          onClick={() => router.push("/staffManagement")}
-          className="pb-3 text-sm font-medium text-gray-500 hover:text-gray-300"
-        >
-          Staff Management
-        </button>
-
-        <button className="relative pb-3 text-sm font-medium text-white">
-          Attendance
-          <span className="absolute left-0 right-0 bottom-0 h-1 bg-primary rounded-t-md" />
-        </button>
-      </div>
-
       {/* Top Bar */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-h5 font-medium">
@@ -123,6 +108,20 @@ export default function AttendancePage() {
             Sort by <ChevronDown size={14} />
           </button>
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={() => router.push("/staffManagement")}
+          className="px-4 py-2 rounded-md text-sm font-medium text-gray-400 hover:text-gray-200"
+        >
+          Staff Management
+        </button>
+
+        <button className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-black">
+          Attendance
+        </button>
       </div>
 
       <DataTable columns={columns} data={attendanceList} />
