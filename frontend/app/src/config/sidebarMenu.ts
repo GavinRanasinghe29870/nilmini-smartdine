@@ -15,7 +15,7 @@ export const sidebarMenu = [
   },
   {
     label: "Menu",
-    href: "/menu",
+    href: "/menu/predictedMenu",
     icon: ClipboardList,
   },
   {
@@ -25,12 +25,12 @@ export const sidebarMenu = [
   },
   {
     label: "Inventory",
-    href: "/inventory",
+    href: "/inventory/inventoryManagement",
     icon: Package,
   },
   {
     label: "Products",
-    href: "/products",
+    href: "/products/productsManagement",
     icon: ShoppingBag,
   },
   {
