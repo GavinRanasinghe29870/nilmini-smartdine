@@ -20,7 +20,6 @@ export default function StaffDetailPage() {
 
   return (
     <main className="flex-1 overflow-auto bg-bg-1 text-white">
-      {/* Assuming this is inside a layout with sidebar, no need for extra padding here */}
       <div className="p-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
@@ -34,7 +33,7 @@ export default function StaffDetailPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
-          {/* Left Column - Profile Image */}
+          {/* Profile Image */}
           <div className="bg-bg-2 rounded-xl p-6 flex flex-col items-center">
             <div className="relative mb-6">
               <img
@@ -57,7 +56,7 @@ export default function StaffDetailPage() {
             </button>
           </div>
 
-          {/* Right Column - Details */}
+          {/* Details */}
           <div className="lg:col-span-2 space-y-8">
             {/* Employee Personal Details */}
             <div className="bg-bg-2 rounded-xl p-6">
@@ -113,7 +112,7 @@ export default function StaffDetailPage() {
               </div>
             </div>
 
-            {/* Employee Expenses - Form (non-functional, just UI) */}
+            {/* Employee Expenses Form */}
             <div className="bg-bg-2 rounded-xl p-6">
               <h3 className="text-lg font-semibold mb-6 text-gray-300">
                 Employee Expenses

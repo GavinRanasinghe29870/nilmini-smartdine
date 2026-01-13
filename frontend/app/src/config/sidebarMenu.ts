@@ -5,6 +5,7 @@ import {
   ClipboardList,
   FileText,
   ShoppingBag,
+  ClipboardCheck, 
 } from "lucide-react";
 
 export const sidebarMenu = [
@@ -29,13 +30,19 @@ export const sidebarMenu = [
     icon: Package,
   },
   {
+    label: "Order Management",
+    href: "/orders",
+    icon: ClipboardCheck,
+  },
+
+  {
     label: "Products",
     href: "/products/productsManagement",
     icon: ShoppingBag,
   },
   {
     label: "Reports",
-    href: "/reports",
+    href: "/reports/revenueReport",
     icon: FileText,
   },
 ];
