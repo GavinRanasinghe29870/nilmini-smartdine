@@ -69,7 +69,7 @@ export default function EditStaffModal({
             Change Profile Picture
           </button>
         </div>
-        {/* Form - Two columns where possible */}
+        {/* Form */}
         <div className="grid grid-cols-2 gap-4">
           {/* Full Name */}
           <div className="col-span-2">

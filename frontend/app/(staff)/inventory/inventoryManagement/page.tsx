@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, X, ArrowLeft } from "lucide-react";
 import DataTable, { Column } from "../../../src/components/DataTable";
 import Image from "next/image";
 import AddItemModal from "../AddItemModal";
 import EditItemModal from "../EditItemModal";
+import { useRouter } from "next/navigation";
+
 
 type InventoryItem = {
   id: number;
@@ -18,6 +20,7 @@ type InventoryItem = {
 };
 
 export default function InventoryPage() {
+  const router = useRouter();
   const [inventory, setInventory] = useState<InventoryItem[]>(
     Array.from({ length: 6 }).map((_, i) => ({
       id: i + 1,
@@ -39,7 +42,7 @@ export default function InventoryPage() {
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
 
   /* 🔹 Add Item modal */
-  const [isAddItemOpen, setIsAddItemOpen] = useState(false); 
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
 
   const openModal = (item: InventoryItem) => {
     setSelectedItem(item);
@@ -137,10 +140,23 @@ export default function InventoryPage() {
   return (
     <main className="flex-1 p-8 relative">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => router.back()}
+          className="p-2 rounded-full bg-bg-2 hover:bg-bg-1"
+        >
+          <ArrowLeft size={18} />
+        </button>
         <h1 className="text-h4 font-semibold">Inventory</h1>
+      </div>
 
-        {/* ADD ITEM MODAL */}
+      {/* Top Bar */}
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-h5 font-medium">
+          Inventory Items{" "}
+          <span className="text-gray-400">({inventory.length})</span>
+        </h2>
+
         <button
           onClick={() => setIsAddItemOpen(true)}
           className="px-4 py-2 bg-primary text-text-black rounded-lg flex items-center gap-2"
@@ -153,7 +169,7 @@ export default function InventoryPage() {
       {/* Table */}
       <DataTable columns={inventoryColumns} data={inventory} />
 
-      {/* 🔹 Quantity Modal */}
+      {/* Quantity Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-bg-1 flex items-center justify-center z-50">
           <div className="bg-bg-2 rounded-xl w-[420px] p-6 relative">
