@@ -13,7 +13,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-/* -------------------- Mock Chart Data -------------------- */
+/* Mock Chart Data */
 const chartData = [
   { month: "JAN", sales: 2200, revenue: 1800 },
   { month: "FEB", sales: 2600, revenue: 2100 },
@@ -32,14 +32,14 @@ const chartData = [
 export default function DashboardPage() {
   return (
     <div className="flex min-h-screen bg-bg-1 text-foreground font-sans">
-      {/* -------------------- Main Content -------------------- */}
+      {/*  Main Content  */}
       <main className="flex-1 p-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <h2 className="text-h2 font-semibold">Dashboard</h2>
+          <h2 className="text-2xl font-semibold">Dashboard</h2>
         </div>
 
-        {/* -------------------- Stat Cards -------------------- */}
+        {/*   Stat Cards   */}
         <div className="grid grid-cols-3 gap-6 mb-8">
           <StatCard
             title="Daily Sales"
@@ -57,16 +57,16 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* -------------------- Middle Cards -------------------- */}
+        {/*   Middle Cards   */}
         <div className="grid grid-cols-2 gap-6 mb-8">
           <PopularDishes />
           <PredictedMenu />
         </div>
 
-        {/* -------------------- Overview Chart -------------------- */}
+        {/*   Overview Chart   */}
         <div className="bg-bg-2 rounded-2xl p-6">
           <div className="flex justify-between items-center mb-6">
-            <h4 className="text-h4 font-medium">Overview</h4>
+            <h4 className="text-lg font-medium">Overview</h4>
 
             <div className="flex gap-2">
               {["Monthly", "Daily", "Weekly"].map((t) => (
@@ -113,7 +113,7 @@ export default function DashboardPage() {
   );
 }
 
-/* -------------------- Reusable Inline Components -------------------- */
+/*   Reusable Inline Components   */
 
 function StatCard({
   title,
