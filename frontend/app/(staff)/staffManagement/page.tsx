@@ -1,21 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Plus,
-  ChevronDown,
-  ArrowLeft,
-  Eye,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, ChevronDown, ArrowLeft, Eye, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+
 import DataTable, { Column } from "../../src/components/DataTable";
 import AddStaffModal from "./AddStaffModal";
 import EditStaffModal from "./EditStaffModal";
 
-type Staff = {
-  id: number;
+import type { Staff } from "../../../app/src/types/staff";
+import { getAllStaff } from "../../../app/src/lib/api/staff.api";
+
+type UIStaff = {
+  id: string;
   name: string;
   role: string;
   email: string;
@@ -26,29 +23,65 @@ type Staff = {
   endTime: string;
   address: string;
   additional: string;
+  image?: string;
 };
 
 export default function StaffManagementPage() {
   const router = useRouter();
+
   const [openAddStaff, setOpenAddStaff] = useState(false);
-  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [editingStaff, setEditingStaff] = useState<UIStaff | null>(null);
 
-  const staffList: Staff[] = Array.from({ length: 22 }).map((_, i) => ({
-    id: 101 + i,
-    name: "Watson Joyce",
-    role: "Manager",
-    email: "watsonjoyce112@gmail.com",
-    phone: "+1 (123) 123 4654",
-    dob: "1980-01-01",
-    salary: 2200,
-    startTime: "9am",
-    endTime: "6pm",
-    address: "",
-    additional: "",
-  }));
+  const [staffList, setStaffList] = useState<UIStaff[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const staffColumns: Column<Staff>[] = [
-    { key: "id", label: "ID", render: (r) => `#${r.id}` },
+  function toUIStaff(u: Staff): UIStaff {
+    // fallback id if backend _id missing
+    const id =
+      u._id ||
+      (typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`);
+
+    return {
+      id,
+      name: u.fullName || "",
+      role: u.role || "STAFF",
+      email: u.email || "",
+      phone: u.phone || "",
+      dob: u.dob || "",
+      salary: u.salary ?? 0,
+      startTime: u.shiftStart || "",
+      endTime: u.shiftEnd || "",
+      address: u.address || "",
+      additional: u.additionalDetails || "",
+    };
+  }
+
+  async function loadStaff() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const list = await getAllStaff();
+      const mapped = list.map(toUIStaff);
+
+      setStaffList(mapped);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Failed to load staff";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadStaff();
+  }, []);
+
+  const staffColumns: Column<UIStaff>[] = [
+    { key: "id", label: "ID", render: (r) => `#${r.id.slice(-6)}` },
     {
       key: "name",
       label: "Name",
@@ -59,26 +92,31 @@ export default function StaffManagementPage() {
         </div>
       ),
     },
-    { key: "email", label: "Email" },
-    { key: "phone", label: "Phone" },
+    { key: "email", label: "Email", render: (r) => r.email || "-" },
+    { key: "phone", label: "Phone", render: (r) => r.phone || "-" },
     {
       key: "age",
       label: "Age",
-      render: (r) =>
-        `${Math.floor(
-          (Date.now() - new Date(r.dob).getTime()) /
-            (365.25 * 24 * 60 * 60 * 1000)
-        )} yr`,
+      render: (r) => {
+        if (!r.dob) return "-";
+        const age = Math.floor(
+          (Date.now() - new Date(r.dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+        );
+        return `${age} yr`;
+      },
     },
     {
       key: "salary",
       label: "Salary",
-      render: (r) => `$${r.salary.toFixed(2)}`,
+      render: (r) => `$${Number(r.salary || 0).toFixed(2)}`,
     },
     {
       key: "time",
       label: "Timings",
-      render: (r) => `${r.startTime} to ${r.endTime}`,
+      render: (r) => {
+        if (!r.startTime && !r.endTime) return "-";
+        return `${r.startTime || ""} to ${r.endTime || ""}`;
+      },
     },
     {
       key: "actions",
@@ -92,12 +130,14 @@ export default function StaffManagementPage() {
           >
             <Eye size={16} />
           </button>
+
           <button
             onClick={() => setEditingStaff(row)}
             className="text-gray-400 hover:text-white"
           >
             <Pencil size={16} />
           </button>
+
           <button className="text-red-500">
             <Trash2 size={16} />
           </button>
@@ -118,8 +158,6 @@ export default function StaffManagementPage() {
         </button>
         <h1 className="text-h4 font-semibold">Staff Management</h1>
       </div>
-
-      
 
       {/* Top Bar */}
       <div className="flex justify-between items-center mb-6">
@@ -156,9 +194,24 @@ export default function StaffManagementPage() {
         </button>
       </div>
 
-      <DataTable columns={staffColumns} data={staffList} />
+      {/* Errors / Loading */}
+      {error && <p className="text-red-400 mb-4">{error}</p>}
+      {loading ? (
+        <p className="text-gray-400">Loading...</p>
+      ) : (
+        <DataTable columns={staffColumns} data={staffList} />
+      )}
 
-      <AddStaffModal open={openAddStaff} onClose={() => setOpenAddStaff(false)} />
+      {/* Modals */}
+      <AddStaffModal
+        open={openAddStaff}
+        onClose={() => setOpenAddStaff(false)}
+        onCreated={() => {
+          setOpenAddStaff(false);
+          loadStaff();
+        }}
+      />
+
       <EditStaffModal
         open={!!editingStaff}
         staff={editingStaff}
