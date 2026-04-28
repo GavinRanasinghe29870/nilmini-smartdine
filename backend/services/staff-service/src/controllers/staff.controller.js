@@ -8,7 +8,9 @@ exports.createUser = async (req, res) => {
     const data = await authStaffService.createStaff({ cookie, payload });
     return res.status(201).json(data);
   } catch (err) {
-    return res.status(err.status || 500).json({ message: err.message || "Server error" });
+    return res.status(err.status || 500).json({
+      message: err.message || "Server error",
+    });
   }
 };
 
@@ -19,6 +21,12 @@ exports.listUsers = async (req, res) => {
     const data = await authStaffService.getStaffList({ cookie });
     return res.json(data);
   } catch (err) {
-    return res.status(err.status || 500).json({ message: err.message || "Server error" });
+    return res.status(err.status || 500).json({
+      message: err.message || "Server error",
+    });
   }
+};
+
+exports.getMe = async (req, res) => {
+  return res.json({ tokenUser: req.user });
 };

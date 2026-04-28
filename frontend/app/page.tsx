@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function WelcomeSection() {
   return (
     <section
@@ -23,9 +25,12 @@ export default function WelcomeSection() {
           for you.
         </p>
 
-        <button className="bg-button text-white px-16 py-5 rounded-xl text-h4 font-semibold hover:opacity-90 transition">
+        <Link
+          href="/productPlacing"
+          className="inline-block bg-button text-white px-16 py-5 rounded-xl text-h4 font-semibold hover:opacity-90 transition"
+        >
           Continue
-        </button>
+        </Link>
       </div>
     </section>
   );

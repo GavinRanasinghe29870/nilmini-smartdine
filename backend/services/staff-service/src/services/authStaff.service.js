@@ -1,9 +1,8 @@
 const fetch = require("node-fetch");
-const AUTH_BASE = process.env.AUTH_SERVICE_URL; 
+
+const AUTH_BASE = (process.env.AUTH_SERVICE_URL || "http://localhost:5001").replace(/\/$/, "");
 
 async function callAuth(path, { method = "GET", cookie, body } = {}) {
-  if (!AUTH_BASE) throw new Error("AUTH_SERVICE_URL missing in staff-service .env");
-
   const res = await fetch(`${AUTH_BASE}${path}`, {
     method,
     headers: {
@@ -14,7 +13,8 @@ async function callAuth(path, { method = "GET", cookie, body } = {}) {
   });
 
   const text = await res.text();
-  let data;
+
+  let data = null;
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
@@ -30,12 +30,21 @@ async function callAuth(path, { method = "GET", cookie, body } = {}) {
   return data;
 }
 
-// auth-service staff endpoints
 exports.createStaff = ({ cookie, payload }) =>
-  callAuth("/staff", { method: "POST", cookie, body: payload });
+  callAuth("/api/staff", {
+    method: "POST",
+    cookie,
+    body: payload,
+  });
 
 exports.getStaffList = ({ cookie }) =>
-  callAuth("/staff", { method: "GET", cookie });
+  callAuth("/api/staff", {
+    method: "GET",
+    cookie,
+  });
 
 exports.getStaffById = ({ cookie, id }) =>
-  callAuth(`/staff/${id}`, { method: "GET", cookie });
+  callAuth(`/api/staff/${id}`, {
+    method: "GET",
+    cookie,
+  });

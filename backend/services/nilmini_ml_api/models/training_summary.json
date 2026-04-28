@@ -1,0 +1,40 @@
+{
+  "target_mape_threshold": 20.0,
+  "ml_eval_products_average_test_mape": 29.307,
+  "ml_eval_products_average_test_wmape": 29.9296,
+  "fallback_only_products_operational_wmape": 45.6544,
+  "full_selected_products_operational_wmape": 36.2615,
+  "requested_product_count": 19,
+  "found_in_csv_count": 19,
+  "ml_eval_product_count": 10,
+  "fallback_only_product_count": 9,
+  "ml_eval_products": [
+    "Egg Rotti",
+    "Breakfast",
+    "Dal Curry",
+    "Tea",
+    "Roast bread",
+    "Vegitable Roti",
+    "Rolls",
+    "Plain Tea",
+    "Cigarette",
+    "Soft drinks"
+  ],
+  "fallback_only_products": [
+    "Kahata",
+    "Roti",
+    "Watter Bottle",
+    "Hoppers",
+    "Chicken Curry",
+    "String Hoppers",
+    "Bulath vita",
+    "Ulundu Wade",
+    "Bread"
+  ],
+  "missing_requested_products": [],
+  "production_ready_products": [
+    "Breakfast"
+  ],
+  "meets_target_as_average_for_ml_eval_products": false,
+  "model_type": "per_product_feature_template_selection_plus_model_selection"
+}

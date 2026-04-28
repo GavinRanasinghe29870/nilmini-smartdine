@@ -32,10 +32,10 @@ export default function AttendancePage() {
         i % 4 === 0
           ? "Present"
           : i % 4 === 1
-          ? "Absent"
-          : i % 4 === 2
-          ? "Half Shift"
-          : "Leave",
+            ? "Absent"
+            : i % 4 === 2
+              ? "Half Shift"
+              : "Leave",
     })
   );
 
@@ -59,14 +59,13 @@ export default function AttendancePage() {
       render: (r) => (
         <button
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
-            ${
-              r.status === "Present"
-                ? "bg-primary text-black"
-                : r.status === "Absent"
+            ${r.status === "Present"
+              ? "bg-primary text-black"
+              : r.status === "Absent"
                 ? "bg-yellow-400 text-black"
                 : r.status === "Half Shift"
-                ? "bg-cyan-400 text-black"
-                : "bg-red-500 text-black"
+                  ? "bg-cyan-400 text-black"
+                  : "bg-red-500 text-black"
             }`}
         >
           {r.status}
@@ -129,6 +128,9 @@ export default function AttendancePage() {
       <AddStaffModal
         open={openAddStaff}
         onClose={() => setOpenAddStaff(false)}
+        onCreated={() => {
+          setOpenAddStaff(false);
+        }}
       />
     </main>
   );

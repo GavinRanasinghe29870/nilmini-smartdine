@@ -10,6 +10,7 @@ import EditStaffModal from "./EditStaffModal";
 
 import type { Staff } from "../../../app/src/types/staff";
 import { getAllStaff } from "../../../app/src/lib/api/staff.api";
+import { verify } from "../../../app/src/lib/auth";
 
 type UIStaff = {
   id: string;
@@ -33,11 +34,11 @@ export default function StaffManagementPage() {
   const [editingStaff, setEditingStaff] = useState<UIStaff | null>(null);
 
   const [staffList, setStaffList] = useState<UIStaff[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [allowed, setAllowed] = useState(false);
 
   function toUIStaff(u: Staff): UIStaff {
-    // fallback id if backend _id missing
     const id =
       u._id ||
       (typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -65,9 +66,7 @@ export default function StaffManagementPage() {
       setError("");
 
       const list = await getAllStaff();
-      const mapped = list.map(toUIStaff);
-
-      setStaffList(mapped);
+      setStaffList(list.map(toUIStaff));
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to load staff";
       setError(message);
@@ -77,8 +76,27 @@ export default function StaffManagementPage() {
   }
 
   useEffect(() => {
-    loadStaff();
-  }, []);
+    async function init() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const data = await verify();
+
+        if (data?.user?.role !== "OWNER") {
+          router.replace("/dashboard");
+          return;
+        }
+
+        setAllowed(true);
+        await loadStaff();
+      } catch {
+        router.replace("/login");
+      }
+    }
+
+    init();
+  }, [router]);
 
   const staffColumns: Column<UIStaff>[] = [
     { key: "id", label: "ID", render: (r) => `#${r.id.slice(-6)}` },
@@ -146,9 +164,18 @@ export default function StaffManagementPage() {
     },
   ];
 
+  if (!allowed && loading) {
+    return (
+      <main className="flex-1 p-8">
+        <p className="text-gray-400">Loading...</p>
+      </main>
+    );
+  }
+
+  if (!allowed) return null;
+
   return (
     <main className="flex-1 p-8">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
           onClick={() => router.back()}
@@ -159,7 +186,6 @@ export default function StaffManagementPage() {
         <h1 className="text-h4 font-semibold">Staff Management</h1>
       </div>
 
-      {/* Top Bar */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-h5 font-medium">
           Staff <span className="text-gray-400">({staffList.length})</span>
@@ -180,7 +206,6 @@ export default function StaffManagementPage() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-4 mb-6">
         <button className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-black">
           Staff Management
@@ -194,7 +219,6 @@ export default function StaffManagementPage() {
         </button>
       </div>
 
-      {/* Errors / Loading */}
       {error && <p className="text-red-400 mb-4">{error}</p>}
       {loading ? (
         <p className="text-gray-400">Loading...</p>
@@ -202,7 +226,6 @@ export default function StaffManagementPage() {
         <DataTable columns={staffColumns} data={staffList} />
       )}
 
-      {/* Modals */}
       <AddStaffModal
         open={openAddStaff}
         onClose={() => setOpenAddStaff(false)}
