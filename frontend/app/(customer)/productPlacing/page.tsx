@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -10,15 +11,20 @@ import {
   Croissant,
   CupSoda,
   Fish,
+  Trash2,
   LucideIcon,
 } from "lucide-react";
+
 import SingleProductModal from "../SingleProductModal";
 import {
   getCategories,
+  getImageSrc,
   getProducts,
 } from "../../src/lib/api/product.api";
-import type { CategoryDto } from "../../../app/src/types/category";
-import type { ProductDto } from "../../../app/src/types/product";
+import { createOrder } from "../../src/lib/api/order.api";
+import type { CategoryDto } from "../../src/types/category";
+import type { ProductDto } from "../../src/types/product";
+import type { DayType } from "../../src/types/order";
 
 const iconMap: Record<string, LucideIcon> = {
   Grid3x3,
@@ -30,27 +36,73 @@ const iconMap: Record<string, LucideIcon> = {
   Fish,
 };
 
-function resolveImage(path?: string) {
-  if (!path || !String(path).trim()) return "/EggRot.jpg";
-  return path;
+type CartItem = {
+  productId: string;
+  name: string;
+  categoryName: string;
+  image: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+type OrderForm = {
+  ageGroup: string;
+  groupSize: string;
+  weather: string;
+  dayType: DayType;
+};
+
+function toNumber(value: number | string | undefined | null) {
+  const result = Number(value);
+
+  if (!Number.isFinite(result)) {
+    return 0;
+  }
+
+  return result;
 }
 
-export default function App() {
+function getProductIngredients(product: ProductDto | null) {
+  if (!product?.ingredients || !Array.isArray(product.ingredients)) {
+    return [];
+  }
+
+  return product.ingredients.map((ingredient) => {
+    const name = ingredient.name?.trim() || "Ingredient";
+    const quantity = ingredient.quantity?.trim() || "";
+    const unit = ingredient.unit?.trim() || "";
+
+    return `${name}: ${quantity} ${unit}`.trim();
+  });
+}
+
+export default function ProductPlacingPage() {
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [cartCount, setCartCount] = useState(1);
-  const [cartTotal, setCartTotal] = useState(150.0);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [quantity, setQuantity] = useState(1);
 
-  const [selectedProduct, setSelectedProduct] = useState<ProductDto | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<ProductDto | null>(
+    null
+  );
 
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isOrderDetailsOpen, setIsOrderDetailsOpen] = useState(false);
   const [isOrderPopupOpen, setIsOrderPopupOpen] = useState(false);
+  const [submittingOrder, setSubmittingOrder] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+
+  const [orderForm, setOrderForm] = useState<OrderForm>({
+    ageGroup: "Young Adults",
+    groupSize: "1",
+    weather: "Normal",
+    dayType: "Work Day",
+  });
 
   const loadData = async () => {
     try {
@@ -85,20 +137,81 @@ export default function App() {
         icon: "Grid3x3",
         image: "",
       },
-      ...categories,
+      ...categories.map((category) => ({
+        ...category,
+        count: products.filter(
+          (product) => product.categoryName === category.name
+        ).length,
+      })),
     ];
   }, [categories, products]);
 
   const filteredProducts = useMemo(() => {
-    if (selectedCategory === "All") return products;
+    if (selectedCategory === "All") {
+      return products;
+    }
+
     return products.filter((item) => item.categoryName === selectedCategory);
   }, [products, selectedCategory]);
+
+  const cartCount = useMemo(() => {
+    return cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  }, [cartItems]);
+
+  const cartTotal = useMemo(() => {
+    return cartItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  }, [cartItems]);
 
   const handleAddToCart = () => {
     if (!selectedProduct) return;
 
-    setCartCount((prev) => prev + quantity);
-    setCartTotal((prev) => prev + quantity * selectedProduct.price);
+    const selectedProductWithMongoId = selectedProduct as ProductDto & {
+      _id?: string;
+    };
+
+    const productId =
+      selectedProduct.id || selectedProductWithMongoId._id || "";
+
+    if (!productId) {
+      setError("Product ID is missing. Please refresh and try again.");
+      return;
+    }
+
+    const unitPrice = toNumber(selectedProduct.price);
+
+    setCartItems((prev) => {
+      const existingItem = prev.find((item) => item.productId === productId);
+
+      if (existingItem) {
+        return prev.map((item) => {
+          if (item.productId !== productId) {
+            return item;
+          }
+
+          const newQuantity = item.quantity + quantity;
+
+          return {
+            ...item,
+            quantity: newQuantity,
+            lineTotal: Number((newQuantity * item.unitPrice).toFixed(2)),
+          };
+        });
+      }
+
+      return [
+        ...prev,
+        {
+          productId,
+          name: selectedProduct.name,
+          categoryName: selectedProduct.categoryName || "",
+          image: selectedProduct.image || "",
+          quantity,
+          unitPrice,
+          lineTotal: Number((quantity * unitPrice).toFixed(2)),
+        },
+      ];
+    });
+
     setQuantity(1);
     setIsModalOpen(false);
   };
@@ -107,15 +220,56 @@ export default function App() {
     setQuantity((prev) => Math.max(1, prev + delta));
   };
 
-  const handlePlaceOrder = () => {
-    const newOrderId = `ORD-${Date.now().toString().slice(-6)}`;
-    setOrderId(newOrderId);
-    setIsOrderPopupOpen(true);
+  const handleRemoveCartItem = (productId: string) => {
+    setCartItems((prev) => prev.filter((item) => item.productId !== productId));
+  };
+
+  const handleOpenOrderDetails = () => {
+    if (cartItems.length === 0) {
+      setError(
+        "Please add at least one product to the cart before placing an order."
+      );
+      return;
+    }
+
+    setError("");
+    setIsOrderDetailsOpen(true);
+  };
+
+  const handleSubmitOrder = async () => {
+    try {
+      setSubmittingOrder(true);
+      setError("");
+
+      const createdOrder = await createOrder({
+        ageGroup: orderForm.ageGroup,
+        groupSize: Number(orderForm.groupSize) || 1,
+        weather: orderForm.weather,
+        dayType: orderForm.dayType,
+        paymentMethod: "Cashier",
+        items: cartItems.map((item) => ({
+          productId: item.productId,
+          productName: item.name,
+          categoryName: item.categoryName,
+          image: item.image,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+      });
+
+      setOrderId(createdOrder.orderNumber);
+      setCartItems([]);
+      setIsOrderDetailsOpen(false);
+      setIsOrderPopupOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to place order");
+    } finally {
+      setSubmittingOrder(false);
+    }
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* Header */}
       <header className="bg-bg-2 px-6 py-4 border-b border-gray-800">
         <div className="max-w-7xl mx-auto flex justify-between items-center gap-6">
           <h1 className="text-3xl font-bold leading-tight shrink-0">
@@ -124,7 +278,6 @@ export default function App() {
             <span className="text-secondary">HOTEL</span>
           </h1>
 
-          {/* Advertisement Banner */}
           <div className="hidden md:flex items-center justify-between w-[360px] lg:w-[420px] h-[72px] rounded-xl px-5 bg-gradient-to-r from-bg-1 to-button border border-primary/20 shadow-lg overflow-hidden">
             <div>
               <p className="text-[11px] uppercase tracking-widest text-primary font-bold">
@@ -147,7 +300,6 @@ export default function App() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
         <nav className="w-64 bg-bg-2 px-5 py-6 space-y-4 z-40 border-r border-gray-800 overflow-y-auto">
           {allCategories.map((cat) => {
             const Icon = iconMap[cat.icon || "Grid3x3"] || Grid3x3;
@@ -168,20 +320,21 @@ export default function App() {
                   <Icon size={18} />
                   <span className="text-sm">{cat.name}</span>
                 </div>
+
                 <span className="text-xs opacity-80">{cat.count}</span>
               </button>
             );
           })}
         </nav>
 
-        {/* Product Grid */}
-        <main className="flex-1 px-8 pt-6 pb-24 overflow-y-auto bg-[#1a1926]">
+        <main className="flex-1 px-8 pt-6 pb-32 overflow-y-auto bg-[#1a1926]">
           <div className="max-w-7xl mx-auto">
             <div className="flex justify-between items-center mb-5">
               <div>
                 <h2 className="text-2xl font-semibold text-text-white">
                   {selectedCategory === "All" ? "Our Menu" : selectedCategory}
                 </h2>
+
                 <p className="text-sm text-gray-400 mt-1">
                   {loading
                     ? "Loading products..."
@@ -189,9 +342,7 @@ export default function App() {
                 </p>
               </div>
 
-              {error && (
-                <p className="text-sm text-red-400">{error}</p>
-              )}
+              {error && <p className="text-sm text-red-400">{error}</p>}
             </div>
 
             {loading ? (
@@ -218,58 +369,72 @@ export default function App() {
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                {filteredProducts.map((product) => (
-                  <button
-                    key={product.id}
-                    onClick={() => {
-                      setSelectedProduct(product);
-                      setQuantity(1);
-                      setIsModalOpen(true);
-                    }}
-                    className="bg-[#2b2940] rounded-xl p-3 flex flex-col items-center gap-3
-                    shadow-lg hover:shadow-primary/10 hover:scale-[1.02]
-                    transition active:scale-[0.98] border border-gray-700/50 text-left"
-                  >
-                    <div className="w-full aspect-square rounded-lg overflow-hidden bg-bg-1">
-                      <img
-                        src={resolveImage(product.image)}
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
+                {filteredProducts.map((product) => {
+                  const productPrice = toNumber(product.price);
+                  const imageSrc = getImageSrc(product.image);
 
-                    <div className="w-full text-center pb-2">
-                      <h3 className="text-lg font-medium text-text-white truncate w-full">
-                        {product.name}
-                      </h3>
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedProduct(product);
+                        setQuantity(1);
+                        setIsModalOpen(true);
+                      }}
+                      className="bg-[#2b2940] rounded-xl p-3 flex flex-col items-center gap-3
+                      shadow-lg hover:shadow-primary/10 hover:scale-[1.02]
+                      transition active:scale-[0.98] border border-gray-700/50 text-left"
+                    >
+                      <div className="w-full aspect-square rounded-lg overflow-hidden bg-bg-1 flex items-center justify-center">
+                        {imageSrc ? (
+                          <img
+                            src={imageSrc}
+                            alt={product.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <span className="text-xs text-gray-500">
+                            No Image
+                          </span>
+                        )}
+                      </div>
 
-                      <p className="text-xs text-gray-400 truncate mt-1">
-                        {product.categoryName}
-                      </p>
+                      <div className="w-full text-center pb-2">
+                        <h3 className="text-lg font-medium text-text-white truncate w-full">
+                          {product.name}
+                        </h3>
 
-                      <p className="text-primary font-bold mt-2">
-                        LKR {product.price.toFixed(0)}
-                      </p>
+                        <p className="text-xs text-gray-400 truncate mt-1">
+                          {product.categoryName}
+                        </p>
 
-                      <p
-                        className={`text-xs mt-2 font-medium ${
-                          product.availability === "In Stock"
-                            ? "text-green-400"
-                            : "text-red-400"
-                        }`}
-                      >
-                        {product.availability}
-                      </p>
-                    </div>
-                  </button>
-                ))}
+                        <p className="text-primary font-bold mt-2">
+                          LKR {productPrice.toFixed(0)}
+                        </p>
+
+                        <p
+                          className={`text-xs mt-2 font-medium ${
+                            product.availability === "In Stock"
+                              ? "text-green-400"
+                              : "text-red-400"
+                          }`}
+                        >
+                          {product.availability}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         </main>
       </div>
 
-      {/* Bottom Cart */}
       <footer
         className="fixed bottom-0 left-0 md:left-64 w-full md:w-[calc(100%-16rem)] bg-bg-2 px-6 md:px-8 py-3
         flex justify-between items-center border-t border-gray-700 z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.4)]"
@@ -296,26 +461,191 @@ export default function App() {
         </div>
 
         <button
-          onClick={handlePlaceOrder}
-          className="bg-primary hover:bg-yellow-400 text-black
-          font-extrabold py-3 px-8 md:px-12 rounded-xl text-sm md:text-lg transition-all transform hover:scale-105 active:scale-95"
+          onClick={handleOpenOrderDetails}
+          disabled={cartItems.length === 0}
+          className={`font-extrabold py-3 px-8 md:px-12 rounded-xl text-sm md:text-lg transition-all transform active:scale-95 ${
+            cartItems.length === 0
+              ? "bg-gray-600 text-gray-300 cursor-not-allowed"
+              : "bg-primary hover:bg-yellow-400 text-black hover:scale-105"
+          }`}
+          type="button"
         >
           Place My Order
         </button>
       </footer>
 
-      {/* Product Modal */}
       <SingleProductModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         productName={selectedProduct?.name || ""}
-        price={selectedProduct?.price || 0}
+        price={toNumber(selectedProduct?.price)}
         quantity={quantity}
+        productImage={getImageSrc(selectedProduct?.image)}
+        description={selectedProduct?.description || ""}
+        ingredients={getProductIngredients(selectedProduct)}
+        availability={selectedProduct?.availability}
         onQuantityChange={handleQuantityChange}
         onAddToCart={handleAddToCart}
       />
 
-      {/* Order Success Popup */}
+      {isOrderDetailsOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="relative bg-bg-2 rounded-3xl p-8 w-[95%] max-w-2xl shadow-2xl border border-primary/20">
+            <h2 className="text-2xl font-bold text-text-white mb-2">
+              Confirm Your Order
+            </h2>
+
+            <p className="text-sm text-gray-400 mb-6">
+              Please add customer and environment details before placing the
+              order.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">
+                  Age Group
+                </label>
+                <select
+                  value={orderForm.ageGroup}
+                  onChange={(e) =>
+                    setOrderForm((prev) => ({
+                      ...prev,
+                      ageGroup: e.target.value,
+                    }))
+                  }
+                  className="w-full bg-[#1a1926] border border-gray-700 rounded-xl px-4 py-3 text-sm outline-none"
+                >
+                  <option>Children</option>
+                  <option>Teenagers</option>
+                  <option>Young Adults</option>
+                  <option>Adults</option>
+                  <option>Elders</option>
+                  <option>Mixed</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">
+                  Group Size
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={orderForm.groupSize}
+                  onChange={(e) =>
+                    setOrderForm((prev) => ({
+                      ...prev,
+                      groupSize: e.target.value,
+                    }))
+                  }
+                  className="w-full bg-[#1a1926] border border-gray-700 rounded-xl px-4 py-3 text-sm outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">
+                  Weather
+                </label>
+                <select
+                  value={orderForm.weather}
+                  onChange={(e) =>
+                    setOrderForm((prev) => ({
+                      ...prev,
+                      weather: e.target.value,
+                    }))
+                  }
+                  className="w-full bg-[#1a1926] border border-gray-700 rounded-xl px-4 py-3 text-sm outline-none"
+                >
+                  <option>Normal</option>
+                  <option>Sunny</option>
+                  <option>Cloudy</option>
+                  <option>Rainy</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-2">
+                  Day Type
+                </label>
+                <select
+                  value={orderForm.dayType}
+                  onChange={(e) =>
+                    setOrderForm((prev) => ({
+                      ...prev,
+                      dayType: e.target.value as DayType,
+                    }))
+                  }
+                  className="w-full bg-[#1a1926] border border-gray-700 rounded-xl px-4 py-3 text-sm outline-none"
+                >
+                  <option value="Work Day">Work Day</option>
+                  <option value="Holiday">Holiday</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-[#1a1926] border border-gray-700 rounded-2xl p-4 mb-6 max-h-52 overflow-y-auto">
+              <div className="flex justify-between text-sm font-semibold text-gray-300 mb-3">
+                <span>Cart Items</span>
+                <span>LKR {cartTotal.toFixed(2)}</span>
+              </div>
+
+              <div className="space-y-3">
+                {cartItems.map((item) => (
+                  <div
+                    key={item.productId}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <div>
+                      <p className="text-text-white font-medium">
+                        {item.name} × {item.quantity}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        LKR {item.unitPrice.toFixed(2)} each
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-primary font-semibold">
+                        LKR {item.lineTotal.toFixed(2)}
+                      </span>
+
+                      <button
+                        onClick={() => handleRemoveCartItem(item.productId)}
+                        className="text-red-400 hover:text-red-300"
+                        type="button"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {error && <p className="text-sm text-red-400 mb-4">{error}</p>}
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsOrderDetailsOpen(false)}
+                className="px-6 py-3 rounded-xl text-gray-300 hover:text-white"
+                type="button"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleSubmitOrder}
+                disabled={submittingOrder || cartItems.length === 0}
+                className="bg-primary hover:bg-yellow-400 text-black font-bold px-8 py-3 rounded-xl transition disabled:bg-gray-600 disabled:text-gray-300"
+                type="button"
+              >
+                {submittingOrder ? "Placing..." : "Confirm Order"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isOrderPopupOpen && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm">
           <div
@@ -338,7 +668,9 @@ export default function App() {
             </p>
 
             <div className="bg-[#1a1926] rounded-2xl py-6 mb-8 border border-gray-700">
-              <p className="text-xs text-gray-500 uppercase mb-1">Your Order ID</p>
+              <p className="text-xs text-gray-500 uppercase mb-1">
+                Your Order ID
+              </p>
               <p className="text-4xl font-black text-primary tracking-widest">
                 {orderId}
               </p>
@@ -348,6 +680,7 @@ export default function App() {
               onClick={() => setIsOrderPopupOpen(false)}
               className="w-full bg-primary hover:bg-yellow-400 text-black
               font-bold text-lg py-4 rounded-xl transition shadow-lg shadow-primary/10"
+              type="button"
             >
               Got it
             </button>

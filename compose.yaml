@@ -135,6 +135,22 @@ services:
     networks:
       - nilmini-network
 
+  order-service:
+    build:
+      context: ./backend/services/order-service
+    container_name: nilmini-order-service
+    restart: unless-stopped
+    env_file:
+      - ./backend/services/order-service/.env
+    environment:
+      PORT: 5006
+      FRONTEND_ORIGIN: http://localhost:3000
+      CLIENT_ORIGIN: http://localhost:3000
+    ports:
+      - "5006:5006"
+    networks:
+      - nilmini-network  
+
   api-gateway:
     build:
       context: ./backend/api-gateway
@@ -149,6 +165,7 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:5003
       PRODUCT_SERVICE_URL: http://product-service:5004
       AI_MENU_SERVICE_URL: http://ai-menu-service:5005
+      ORDER_SERVICE_URL: http://order-service:5006
       FRONTEND_ORIGIN: http://localhost:3000
       CLIENT_ORIGIN: http://localhost:3000
       FRONTEND_UPLOAD_DIR: /shared/frontend-uploads
@@ -162,6 +179,7 @@ services:
       - inventory-service
       - product-service
       - ai-menu-service
+      - order-service
     networks:
       - nilmini-network
 

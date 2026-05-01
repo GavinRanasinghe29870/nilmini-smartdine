@@ -15,16 +15,12 @@ const STAFF = process.env.STAFF_SERVICE_URL || "http://localhost:5002";
 const INVENTORY = process.env.INVENTORY_SERVICE_URL || "http://localhost:5003";
 const PRODUCT = process.env.PRODUCT_SERVICE_URL || "http://localhost:5004";
 const AI_MENU = process.env.AI_MENU_SERVICE_URL || "http://localhost:5005";
+const ORDER = process.env.ORDER_SERVICE_URL || "http://localhost:5006";
 
 const FRONTEND = process.env.FRONTEND_ORIGIN || "http://localhost:3000";
 
 const PROXY_TIMEOUT = Number(process.env.PROXY_TIMEOUT || 180000);
 
-/**
- * IMPORTANT:
- * This folder must be the SAME shared uploads folder used by
- * product-service and inventory-service.
- */
 const UPLOAD_DIR =
   process.env.UPLOAD_DIR ||
   process.env.FRONTEND_UPLOAD_DIR ||
@@ -41,10 +37,6 @@ app.use(
   })
 );
 
-/**
- * Browser image URLs should use:
- * http://localhost:5000/uploads/filename.jpg
- */
 app.use(
   "/uploads",
   express.static(UPLOAD_DIR, {
@@ -61,6 +53,14 @@ app.get("/api/health", (req, res) => {
     ok: true,
     service: "api-gateway",
     uploadsDir: UPLOAD_DIR,
+    services: {
+      auth: AUTH,
+      staff: STAFF,
+      inventory: INVENTORY,
+      product: PRODUCT,
+      aiMenu: AI_MENU,
+      order: ORDER,
+    },
   });
 });
 
@@ -165,9 +165,89 @@ app.use(
   })
 );
 
+/**
+ * ORDER SERVICE ROUTE
+ * Do not use express-http-proxy here.
+ * Manual forwarding avoids POST body forwarding issues.
+ */
+app.use(
+  "/api/orders",
+  express.json({ limit: "2mb" }),
+  express.urlencoded({ extended: true }),
+  async (req, res) => {
+    try {
+      if (!ORDER) {
+        return res.status(500).json({
+          success: false,
+          message: "ORDER_SERVICE_URL is not configured in API Gateway",
+        });
+      }
+
+      const targetUrl = `${ORDER}${req.originalUrl}`;
+
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      if (req.headers.authorization) {
+        headers.authorization = req.headers.authorization;
+      }
+
+      if (req.headers.cookie) {
+        headers.cookie = req.headers.cookie;
+      }
+
+      const fetchOptions = {
+        method: req.method,
+        headers,
+      };
+
+      if (!["GET", "HEAD"].includes(req.method.toUpperCase())) {
+        fetchOptions.body = JSON.stringify(req.body || {});
+      }
+
+      const response = await fetch(targetUrl, fetchOptions);
+      const responseText = await response.text();
+
+      let responseData;
+
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = {
+          success: false,
+          message: responseText || "Order service returned non-JSON response",
+        };
+      }
+
+      return res.status(response.status).json(responseData);
+    } catch (error) {
+      console.error("Order gateway forwarding error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to forward request to order service",
+        error: error.message,
+      });
+    }
+  }
+);
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route not found: ${req.originalUrl}`,
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`Gateway running on http://localhost:${PORT}`);
   console.log(`Frontend origin: ${FRONTEND}`);
   console.log(`Uploads served from: ${UPLOAD_DIR}`);
+  console.log(`Auth Service URL: ${AUTH}`);
+  console.log(`Staff Service URL: ${STAFF}`);
+  console.log(`Inventory Service URL: ${INVENTORY}`);
+  console.log(`Product Service URL: ${PRODUCT}`);
   console.log(`AI Menu Service URL: ${AI_MENU}`);
+  console.log(`Order Service URL: ${ORDER}`);
 });
