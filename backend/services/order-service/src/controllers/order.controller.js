@@ -61,6 +61,39 @@ function normalizeOrderItems(items) {
   });
 }
 
+function getColomboDateString(offsetDays = 0) {
+  const now = new Date();
+  const targetDate = new Date(now.getTime() + offsetDays * 24 * 60 * 60 * 1000);
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Colombo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(targetDate);
+
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+
+  return `${year}-${month}-${day}`;
+}
+
+function getColomboDateRange(startDate, endDate) {
+  const safeStartDate = startDate || getColomboDateString(0);
+  const safeEndDate = endDate || safeStartDate;
+
+  const start = new Date(`${safeStartDate}T00:00:00.000+05:30`);
+  const end = new Date(`${safeEndDate}T23:59:59.999+05:30`);
+
+  return {
+    start,
+    end,
+    safeStartDate,
+    safeEndDate,
+  };
+}
+
 exports.createOrder = async (req, res, next) => {
   try {
     const {
@@ -96,7 +129,7 @@ exports.createOrder = async (req, res, next) => {
       totalCost,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Order placed successfully",
       data: order,
@@ -133,27 +166,91 @@ exports.getOrders = async (req, res, next) => {
     }
 
     if (startDate || endDate) {
-      filter.placedAt = {};
+      const range = getColomboDateRange(startDate, endDate);
 
-      if (startDate) {
-        filter.placedAt.$gte = new Date(startDate);
-      }
-
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        filter.placedAt.$lte = end;
-      }
+      filter.placedAt = {
+        $gte: range.start,
+        $lte: range.end,
+      };
     }
 
     const orders = await Order.find(filter)
       .sort({ placedAt: -1 })
       .limit(Number(limit));
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: orders.length,
       data: orders,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getDailySales = async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const range = getColomboDateRange(startDate, endDate);
+
+    const rows = await Order.aggregate([
+      {
+        $match: {
+          placedAt: {
+            $gte: range.start,
+            $lte: range.end,
+          },
+          orderStatus: { $ne: "Cancelled" },
+          paymentStatus: { $ne: "Cancelled" },
+        },
+      },
+      {
+        $unwind: "$items",
+      },
+      {
+        $group: {
+          _id: {
+            date: {
+              $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$placedAt",
+                timezone: "Asia/Colombo",
+              },
+            },
+            productName: "$items.productName",
+          },
+          totalQuantity: { $sum: "$items.quantity" },
+          totalRevenue: { $sum: "$items.lineTotal" },
+          categoryName: { $first: "$items.categoryName" },
+          image: { $first: "$items.image" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          date: "$_id.date",
+          productName: "$_id.productName",
+          totalQuantity: 1,
+          totalRevenue: 1,
+          categoryName: 1,
+          image: 1,
+        },
+      },
+      {
+        $sort: {
+          date: 1,
+          productName: 1,
+        },
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      startDate: range.safeStartDate,
+      endDate: range.safeEndDate,
+      count: rows.length,
+      data: rows,
     });
   } catch (error) {
     next(error);
@@ -171,7 +268,7 @@ exports.getOrderById = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: order,
     });
@@ -204,13 +301,17 @@ exports.updateOrder = async (req, res, next) => {
     } = req.body;
 
     if (ageGroup !== undefined) order.ageGroup = ageGroup;
+
     if (groupSize !== undefined) {
       order.groupSize = Number(groupSize) > 0 ? Number(groupSize) : 1;
     }
+
     if (weather !== undefined) order.weather = weather;
+
     if (dayType !== undefined) {
       order.dayType = dayType === "Holiday" ? "Holiday" : "Work Day";
     }
+
     if (orderStatus !== undefined) order.orderStatus = orderStatus;
     if (paymentStatus !== undefined) order.paymentStatus = paymentStatus;
     if (paymentMethod !== undefined) order.paymentMethod = paymentMethod;
@@ -218,6 +319,7 @@ exports.updateOrder = async (req, res, next) => {
 
     if (items !== undefined) {
       const cleanItems = normalizeOrderItems(items);
+
       order.items = cleanItems;
       order.totalCost = Number(
         cleanItems.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2)
@@ -226,7 +328,7 @@ exports.updateOrder = async (req, res, next) => {
 
     await order.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Order updated successfully",
       data: order,
@@ -257,7 +359,7 @@ exports.updateOrderStatus = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Order status updated successfully",
       data: order,
@@ -278,7 +380,7 @@ exports.deleteOrder = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Order deleted successfully",
       data: order,

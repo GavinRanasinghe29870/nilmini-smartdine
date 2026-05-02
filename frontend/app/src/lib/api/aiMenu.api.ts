@@ -1,18 +1,15 @@
 import axios, { AxiosError } from "axios";
 import { api } from "../axios";
-import { GeneratedAiMenu } from "../../types/aiMenu";
+import {
+  GeneratedAiMenu,
+  GenerateAiMenuPayload,
+} from "../../types/aiMenu";
 
 type ApiResponse<T> = {
   success: boolean;
   message?: string;
   error?: string;
   data: T;
-};
-
-type GenerateAiMenuPayload = {
-  predictionDate?: string;
-  weatherType?: string;
-  holiday?: string;
 };
 
 function getApiErrorMessage(error: unknown) {

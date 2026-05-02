@@ -16,6 +16,12 @@ export type InventoryIngredient = {
   availability?: string;
 };
 
+export type ProductType =
+  | "prepared_food"
+  | "beverage"
+  | "retail_stock"
+  | "non_menu_item";
+
 export type ProductDto = {
   id: string;
   name: string;
@@ -27,6 +33,8 @@ export type ProductDto = {
   availability: string;
   image?: string;
   ingredients: IngredientInput[];
+  productType?: ProductType;
+  includeInAiMenu?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -39,6 +47,8 @@ export type CreateProductPayload = {
   availability: string;
   image?: string;
   ingredients: IngredientInput[];
+  productType?: ProductType;
+  includeInAiMenu?: boolean;
 };
 
 export type UpdateProductPayload = {
@@ -49,4 +59,6 @@ export type UpdateProductPayload = {
   availability: string;
   image?: string;
   ingredients: IngredientInput[];
+  productType?: ProductType;
+  includeInAiMenu?: boolean;
 };

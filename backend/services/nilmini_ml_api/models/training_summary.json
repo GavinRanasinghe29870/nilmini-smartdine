@@ -1,9 +1,9 @@
 {
   "target_mape_threshold": 20.0,
-  "ml_eval_products_average_test_mape": 29.307,
-  "ml_eval_products_average_test_wmape": 29.9296,
+  "ml_eval_products_average_test_mape": 29.1469,
+  "ml_eval_products_average_test_wmape": 30.5321,
   "fallback_only_products_operational_wmape": 45.6544,
-  "full_selected_products_operational_wmape": 36.2615,
+  "full_selected_products_operational_wmape": 36.6214,
   "requested_product_count": 19,
   "found_in_csv_count": 19,
   "ml_eval_product_count": 10,
@@ -36,5 +36,12 @@
     "Breakfast"
   ],
   "meets_target_as_average_for_ml_eval_products": false,
-  "model_type": "per_product_feature_template_selection_plus_model_selection"
+  "model_type": "per_product_feature_template_selection_plus_model_selection",
+  "removed_features": [
+    "excel_date_serial",
+    "payday_window"
+  ],
+  "added_features": [
+    "month_period"
+  ]
 }

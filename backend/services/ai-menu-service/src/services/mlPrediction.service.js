@@ -1,70 +1,152 @@
 const axios = require("axios");
+const { addDays, getMonthPeriod } = require("./date.service");
 
-function normalizePrediction(item) {
-  return {
-    productName: item.productName || item.product_name,
-    predictedQuantity: Number(item.predictedQuantity || item.predicted_units || 0),
-    predictionType: item.predictionType || item.prediction_type || "unknown",
-    evaluationLane: item.evaluationLane || item.evaluation_lane || "unknown",
+const ML_API_URL = process.env.ML_API_URL || "http://localhost:8001";
+const ORDER_SERVICE_URL =
+  process.env.ORDER_SERVICE_URL || "http://localhost:5006";
+
+async function getDailySalesRows(date) {
+  const response = await axios.get(
+    `${ORDER_SERVICE_URL}/api/orders/daily-sales`,
+    {
+      params: {
+        startDate: date,
+        endDate: date,
+      },
+      timeout: 60000,
+    }
+  );
+
+  return response.data.data || [];
+}
+
+function buildProductTotalsFromSalesRows(rows) {
+  const totals = {};
+
+  for (const row of rows) {
+    const productName = String(row.productName || "").trim();
+
+    if (!productName) continue;
+
+    totals[productName] =
+      (totals[productName] || 0) + Number(row.totalQuantity || 0);
+  }
+
+  return totals;
+}
+
+async function updateWideCsvWithDailySales({
+  salesDate,
+  weatherType = "Normal",
+  holiday = "No",
+  beforeHolidayFlag = "No",
+  afterHolidayFlag = "No",
+  monthPeriod,
+}) {
+  const rows = await getDailySalesRows(salesDate);
+  const productTotals = buildProductTotalsFromSalesRows(rows);
+
+  if (Object.keys(productTotals).length === 0) {
+    return {
+      success: false,
+      skipped: true,
+      message: `No daily sales found for ${salesDate}. CSV was not updated.`,
+      productTotals: {},
+    };
+  }
+
+  const response = await axios.post(
+    `${ML_API_URL}/data/wide-csv/upsert-day-sales`,
+    {
+      date: salesDate,
+      weather_type: weatherType,
+      holiday,
+      before_holiday_flag: beforeHolidayFlag,
+      after_holiday_flag: afterHolidayFlag,
+      month_period: monthPeriod || getMonthPeriod(salesDate),
+      product_totals: productTotals,
+    },
+    {
+      timeout: 60000,
+    }
+  );
+
+  return response.data;
+}
+
+async function getLivePredictions({
+  predictionDate,
+  weatherType = "Normal",
+  holiday = "No",
+  beforeHolidayFlag = "No",
+  afterHolidayFlag = "No",
+  monthPeriod,
+}) {
+  const salesDate = addDays(predictionDate, -1);
+  const finalMonthPeriod = monthPeriod || getMonthPeriod(predictionDate);
+
+  await updateWideCsvWithDailySales({
+    salesDate,
+    weatherType,
+    holiday,
+    beforeHolidayFlag,
+    afterHolidayFlag,
+    monthPeriod: getMonthPeriod(salesDate),
+  });
+
+  const response = await axios.post(
+    `${ML_API_URL}/predict/next-day-all`,
+    {
+      prediction_date: predictionDate,
+      weather_type: weatherType,
+      holiday,
+      before_holiday_flag: beforeHolidayFlag,
+      after_holiday_flag: afterHolidayFlag,
+      month_period: finalMonthPeriod,
+    },
+    {
+      timeout: 120000,
+    }
+  );
+
+  const predictions = response.data.predictions || [];
+
+  return predictions.map((item) => ({
+    productName: item.productName,
+    predictedQuantity: Number(item.predictedQuantity || 0),
+    predictionType: item.predictionType || "unknown",
+    evaluationLane: item.evaluationLane || "unknown",
     reliability: item.reliability || "Review",
-    testMape: item.testMape || item.test_mape || null,
-    testWmape: item.testWmape || item.test_wmape || null,
+    testMape: item.testMape ?? null,
+    testWmape: item.testWmape ?? null,
+  }));
+}
+
+async function getNextDayPredictions({
+  predictionDate,
+  weatherType = "Normal",
+  holiday = "No",
+  beforeHolidayFlag = "No",
+  afterHolidayFlag = "No",
+  monthPeriod,
+}) {
+  const predictions = await getLivePredictions({
+    predictionDate,
+    weatherType,
+    holiday,
+    beforeHolidayFlag,
+    afterHolidayFlag,
+    monthPeriod,
+  });
+
+  return {
+    success: true,
+    predictions,
   };
 }
 
-function cleanBaseUrl(url) {
-  return String(url || "").replace(/\/+$/, "");
-}
-
-const getNextDayPredictions = async ({ predictionDate, weatherType, holiday }) => {
-  const mlApiUrl = cleanBaseUrl(process.env.ML_API_URL || "http://ml-api:8001");
-
-  try {
-    const response = await axios.post(
-      `${mlApiUrl}/predict/next-day-all`,
-      {
-        prediction_date: predictionDate,
-        weather_type: weatherType || "Normal",
-        holiday: holiday || "No",
-      },
-      {
-        timeout: 60000,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    const rawPredictions =
-      response.data.predictions ||
-      response.data.results ||
-      response.data.data ||
-      [];
-
-    return {
-      predictionDate: response.data.prediction_date || predictionDate,
-      predictions: rawPredictions.map(normalizePrediction),
-    };
-  } catch (error) {
-    if (error.response) {
-      const details =
-        typeof error.response.data === "object"
-          ? JSON.stringify(error.response.data)
-          : String(error.response.data);
-
-      throw new Error(`ML API error ${error.response.status}: ${details}`);
-    }
-
-    if (error.request) {
-      throw new Error(
-        `Cannot connect to ML API at ${mlApiUrl}. Make sure the ml-api Docker service is running and healthy.`
-      );
-    }
-
-    throw new Error(`ML prediction request failed: ${error.message}`);
-  }
-};
-
 module.exports = {
+  getLivePredictions,
   getNextDayPredictions,
+  updateWideCsvWithDailySales,
 };

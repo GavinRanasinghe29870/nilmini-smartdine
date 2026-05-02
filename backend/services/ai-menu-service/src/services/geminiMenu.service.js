@@ -10,7 +10,6 @@ async function getGeminiClient() {
   }
 
   const genai = await import("@google/genai");
-
   const { GoogleGenAI, Type } = genai;
 
   if (!process.env.GEMINI_API_KEY) {
@@ -40,10 +39,12 @@ function getResponseText(response) {
 }
 
 function parseGeminiJson(text) {
+  const value = String(text || "").trim();
+
   try {
-    return JSON.parse(text);
+    return JSON.parse(value);
   } catch {
-    const cleaned = text
+    const cleaned = value
       .replace(/```json/g, "")
       .replace(/```/g, "")
       .trim();
@@ -52,29 +53,58 @@ function parseGeminiJson(text) {
   }
 }
 
-const generateMenuWithGemini = async ({ predictionDate, predictions }) => {
+function buildSafeMenuItems(menuItems = []) {
+  return menuItems.map((item) => ({
+    productName: item.productName,
+    predictedQuantity: Number(item.predictedQuantity || 0),
+    recommendedProductionQuantity: Number(
+      item.recommendedProductionQuantity ?? item.predictedQuantity ?? 0
+    ),
+    confidence: item.confidence || item.reliability || "Review",
+    reliability: item.reliability || "Review",
+    predictionType: item.predictionType || "unknown",
+    evaluationLane: item.evaluationLane || "unknown",
+    categoryName: item.categoryName || "",
+    productType: item.productType || "prepared_food",
+  }));
+}
+
+async function generateMenuWithGemini({
+  predictionDate,
+  menuItems,
+  ingredientList,
+}) {
   const { ai, Type } = await getGeminiClient();
 
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
+  const safeMenuItems = buildSafeMenuItems(menuItems);
+
   const prompt = `
 You are an AI menu planning assistant for Nilmini Hotel.
 
-Generate tomorrow's menu using the ML predictions below.
+Generate a clear next-day menu summary, item reasons, and warnings using the ML predictions and calculated ingredient list.
 
 Important rules:
-1. Do not remove any product from the ML prediction list.
-2. Keep the original predicted quantity.
-3. Recommended production quantity can be rounded only slightly for kitchen practicality.
-4. If reliability is Poor, Review, fallback_only, or unknown, add a warning.
-5. Generate a practical ingredient/stock list.
-6. Return only valid JSON.
-7. Do not add markdown formatting.
+1. Do not change product names.
+2. Do not change predictedQuantity.
+3. Do not change recommendedProductionQuantity.
+4. Do not use ingredients to change predicted quantities.
+5. Do not check inventory stock balance.
+6. Do not invent new products.
+7. Do not remove any provided menu item.
+8. Ingredient quantities are already calculated by the backend. Do not change them.
+9. If reliability is Poor, Review, fallback_only, or unknown, set managerReviewRequired to true.
+10. Return only valid JSON.
+11. Do not add markdown formatting.
 
 Prediction date: ${predictionDate}
 
-ML predictions:
-${JSON.stringify(predictions, null, 2)}
+ML prediction menu items:
+${JSON.stringify(safeMenuItems, null, 2)}
+
+Calculated ingredient list:
+${JSON.stringify(ingredientList || [], null, 2)}
 `;
 
   const response = await ai.models.generateContent({
@@ -108,6 +138,9 @@ ${JSON.stringify(predictions, null, 2)}
                 confidence: {
                   type: Type.STRING,
                 },
+                managerReviewRequired: {
+                  type: Type.BOOLEAN,
+                },
                 reason: {
                   type: Type.STRING,
                 },
@@ -117,29 +150,9 @@ ${JSON.stringify(predictions, null, 2)}
                 "predictedQuantity",
                 "recommendedProductionQuantity",
                 "confidence",
+                "managerReviewRequired",
                 "reason",
               ],
-            },
-          },
-          ingredientList: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                ingredientName: {
-                  type: Type.STRING,
-                },
-                requiredQuantity: {
-                  type: Type.STRING,
-                },
-                relatedProducts: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.STRING,
-                  },
-                },
-              },
-              required: ["ingredientName", "requiredQuantity", "relatedProducts"],
             },
           },
           warnings: {
@@ -149,14 +162,21 @@ ${JSON.stringify(predictions, null, 2)}
             },
           },
         },
-        required: ["menuDate", "summary", "menuItems", "ingredientList", "warnings"],
+        required: ["menuDate", "summary", "menuItems", "warnings"],
       },
     },
   });
 
   const text = getResponseText(response);
-  return parseGeminiJson(text);
-};
+  const parsed = parseGeminiJson(text);
+
+  return {
+    menuDate: parsed.menuDate || predictionDate,
+    summary: parsed.summary || "",
+    menuItems: Array.isArray(parsed.menuItems) ? parsed.menuItems : [],
+    warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
+  };
+}
 
 module.exports = {
   generateMenuWithGemini,

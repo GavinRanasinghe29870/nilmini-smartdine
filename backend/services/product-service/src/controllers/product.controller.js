@@ -36,6 +36,30 @@ function sanitizeIngredients(ingredients = []) {
     }));
 }
 
+function sanitizeProductType(productType) {
+  const allowedTypes = [
+    "prepared_food",
+    "beverage",
+    "retail_stock",
+    "non_menu_item",
+  ];
+
+  return allowedTypes.includes(productType) ? productType : "prepared_food";
+}
+
+function normalizeBoolean(value, defaultValue = true) {
+  if (typeof value === "boolean") return value;
+
+  if (typeof value === "string") {
+    const lowered = value.trim().toLowerCase();
+
+    if (lowered === "true") return true;
+    if (lowered === "false") return false;
+  }
+
+  return defaultValue;
+}
+
 function mapProduct(product) {
   return {
     id: String(product._id),
@@ -52,6 +76,11 @@ function mapProduct(product) {
     availability: product.availability,
     image: normalizeImagePath(product.image),
     ingredients: product.ingredients || [],
+    productType: product.productType || "prepared_food",
+    includeInAiMenu:
+      typeof product.includeInAiMenu === "boolean"
+        ? product.includeInAiMenu
+        : true,
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
   };
@@ -86,6 +115,7 @@ exports.uploadImage = async (req, res) => {
     });
   } catch (error) {
     console.error("uploadImage error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Failed to upload image",
@@ -106,6 +136,7 @@ exports.getProducts = async (req, res) => {
     });
   } catch (error) {
     console.error("getProducts error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Failed to fetch products",
@@ -123,6 +154,8 @@ exports.createProduct = async (req, res) => {
       image = "",
       availability = "In Stock",
       ingredients = [],
+      productType = "prepared_food",
+      includeInAiMenu = true,
     } = req.body;
 
     if (!name || !String(name).trim()) {
@@ -165,6 +198,8 @@ exports.createProduct = async (req, res) => {
         availability === "Out of Stock" ? "Out of Stock" : "In Stock",
       image: normalizeImagePath(image),
       ingredients: sanitizeIngredients(ingredients),
+      productType: sanitizeProductType(productType),
+      includeInAiMenu: normalizeBoolean(includeInAiMenu, true),
     });
 
     await product.populate("category", "name");
@@ -176,6 +211,7 @@ exports.createProduct = async (req, res) => {
     });
   } catch (error) {
     console.error("createProduct error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Failed to create product",
@@ -186,6 +222,7 @@ exports.createProduct = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
+
     const {
       name,
       categoryId,
@@ -194,6 +231,8 @@ exports.updateProduct = async (req, res) => {
       image = "",
       availability = "In Stock",
       ingredients = [],
+      productType = "prepared_food",
+      includeInAiMenu = true,
     } = req.body;
 
     const product = await Product.findById(id);
@@ -243,6 +282,8 @@ exports.updateProduct = async (req, res) => {
       availability === "Out of Stock" ? "Out of Stock" : "In Stock";
     product.image = normalizeImagePath(image);
     product.ingredients = sanitizeIngredients(ingredients);
+    product.productType = sanitizeProductType(productType);
+    product.includeInAiMenu = normalizeBoolean(includeInAiMenu, true);
 
     await product.save();
     await product.populate("category", "name");
@@ -254,6 +295,7 @@ exports.updateProduct = async (req, res) => {
     });
   } catch (error) {
     console.error("updateProduct error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Failed to update product",
@@ -278,6 +320,7 @@ exports.deleteProduct = async (req, res) => {
     });
   } catch (error) {
     console.error("deleteProduct error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Failed to delete product",

@@ -8,7 +8,7 @@ services:
     networks:
       - nilmini-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -20,6 +20,8 @@ services:
     restart: unless-stopped
     ports:
       - "8001:8001"
+    volumes:
+      - ./backend/services/nilmini_ml_api/04_daily_product_counts_wide.csv:/app/04_daily_product_counts_wide.csv
     networks:
       - nilmini-network
     healthcheck:
@@ -121,6 +123,7 @@ services:
       ML_API_URL: http://ml-api:8001
       PRODUCT_SERVICE_URL: http://product-service:5004
       INVENTORY_SERVICE_URL: http://inventory-service:5003
+      ORDER_SERVICE_URL: http://order-service:5006
       FRONTEND_ORIGIN: http://localhost:3000
       CLIENT_ORIGIN: http://localhost:3000
     ports:
@@ -131,6 +134,8 @@ services:
       product-service:
         condition: service_started
       inventory-service:
+        condition: service_started
+      order-service:
         condition: service_started
     networks:
       - nilmini-network
@@ -149,7 +154,7 @@ services:
     ports:
       - "5006:5006"
     networks:
-      - nilmini-network  
+      - nilmini-network
 
   api-gateway:
     build:
