@@ -51,7 +51,7 @@ const generatedMenuSchema = new mongoose.Schema(
       preferredFoodItems: [
         {
           productName: String,
-          preferenceScore: Number,
+          preferenceScore: mongoose.Schema.Types.Mixed,
           totalUnitsByGroup: mongoose.Schema.Types.Mixed,
           groupProductShare: mongoose.Schema.Types.Mixed,
         },
@@ -79,7 +79,6 @@ const generatedMenuSchema = new mongoose.Schema(
         productId: String,
         itemId: String,
         productDbName: String,
-
         productName: String,
         productImage: String,
         categoryName: String,

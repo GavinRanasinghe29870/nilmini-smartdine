@@ -2,11 +2,6 @@ const GeneratedMenu = require("../models/GeneratedMenu");
 const { getNextDayPredictions } = require("../services/mlPrediction.service");
 const { generateMenuWithGemini } = require("../services/geminiMenu.service");
 const {
-  getColomboDateString,
-  isAfterFivePmColombo,
-  getMonthPeriod,
-} = require("../services/date.service");
-const {
   enrichPredictionsWithProducts,
   getMenuEligibleItems,
 } = require("../services/productEnrichment.service");
@@ -17,8 +12,21 @@ const {
   getCustomerMenuPreference,
 } = require("../services/customerPreference.service");
 const {
-  adjustMenuItemsByCustomerPreference,
-} = require("../services/preferenceAdjustment.service");
+  getColomboDateString,
+  isAfterFivePmColombo,
+  getMonthPeriod,
+} = require("../services/date.service");
+
+function normalizeText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function uniqueStrings(values = []) {
+  return [...new Set(values.filter(Boolean))];
+}
 
 function normalizeConfidence(value) {
   const text = String(value || "").trim();
@@ -28,14 +36,7 @@ function normalizeConfidence(value) {
   return text;
 }
 
-function normalizeName(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
-function isManagerReviewRequired(item) {
+function requiresManagerReview(item) {
   const reliability = String(item.reliability || "").toLowerCase();
   const lane = String(item.evaluationLane || "").toLowerCase();
 
@@ -47,16 +48,26 @@ function isManagerReviewRequired(item) {
   );
 }
 
+function buildReason(item) {
+  if (!requiresManagerReview(item)) {
+    return `Based on ${item.predictionType || "ML"} prediction with ${
+      item.reliability || "Moderate"
+    } reliability.`;
+  }
+
+  return `Manager review recommended because reliability is ${
+    item.reliability || "Review"
+  } and prediction type is ${item.predictionType || "unknown"}.`;
+}
+
 function buildMenuItemsFromPredictions(predictions = []) {
   return predictions.map((item) => {
     const predictedQuantity = Number(item.predictedQuantity || 0);
-    const managerReviewRequired = isManagerReviewRequired(item);
 
     return {
       productId: item.productId || "",
       itemId: item.itemId || "",
       productDbName: item.productDbName || "",
-
       productName: item.productName,
       productImage: item.productImage || "",
       categoryName: item.categoryName || "",
@@ -82,23 +93,15 @@ function buildMenuItemsFromPredictions(predictions = []) {
       customerPreferenceNote: "",
       adjustmentReason: "",
 
-      managerReviewRequired,
-
-      reason:
-        item.reliability === "Good" || item.reliability === "Moderate"
-          ? `Based on ${item.predictionType || "ML"} prediction with ${
-              item.reliability
-            } reliability.`
-          : `Manager review recommended because reliability is ${
-              item.reliability || "Review"
-            } and prediction type is ${item.predictionType || "unknown"}.`,
+      managerReviewRequired: requiresManagerReview(item),
+      reason: buildReason(item),
     };
   });
 }
 
 function buildWarningsFromPredictions(predictions = []) {
   return predictions
-    .filter((item) => isManagerReviewRequired(item))
+    .filter((item) => requiresManagerReview(item))
     .map((item) => {
       return `Product '${item.productName}' needs manager review. Reliability: ${
         item.reliability || "Review"
@@ -108,7 +111,7 @@ function buildWarningsFromPredictions(predictions = []) {
 
 function buildDefaultSummary(predictionDate, menuItems, customerPreference) {
   const availableItems = menuItems.filter(
-    (item) => Number(item.adjustedQuantity || item.predictedQuantity || 0) > 0
+    (item) => Number(item.recommendedProductionQuantity || 0) > 0
   );
 
   if (!availableItems.length) {
@@ -118,13 +121,13 @@ function buildDefaultSummary(predictionDate, menuItems, customerPreference) {
   const topItems = [...availableItems]
     .sort(
       (a, b) =>
-        Number(b.adjustedQuantity || b.predictedQuantity || 0) -
-        Number(a.adjustedQuantity || a.predictedQuantity || 0)
+        Number(b.recommendedProductionQuantity || 0) -
+        Number(a.recommendedProductionQuantity || 0)
     )
     .slice(0, 5)
     .map(
       (item) =>
-        `${item.productName} (${item.adjustedQuantity || item.predictedQuantity})`
+        `${item.productName} (${Number(item.recommendedProductionQuantity || 0)})`
     )
     .join(", ");
 
@@ -135,89 +138,108 @@ function buildDefaultSummary(predictionDate, menuItems, customerPreference) {
   return `The predicted menu for ${predictionDate} includes ${availableItems.length} items. Main production items include ${topItems}.${groupText} Manager review is recommended for low reliability items.`;
 }
 
-function uniqueWarnings(items = []) {
-  return [...new Set(items.filter(Boolean))];
+function getPreferenceAdjustmentUnits(rank) {
+  if (rank <= 2) return 15;
+  if (rank <= 5) return 12;
+  return 10;
 }
 
-function mergeGeminiMenuItems(baseItems, geminiItems = []) {
-  const geminiMap = new Map();
-
-  for (const item of geminiItems) {
-    geminiMap.set(normalizeName(item.productName), item);
+function applyCustomerPreferenceAdjustments(menuItems, customerPreference) {
+  if (
+    !customerPreference ||
+    !Array.isArray(customerPreference.preferredFoodItems) ||
+    customerPreference.preferredFoodItems.length === 0
+  ) {
+    return {
+      adjustedMenuItems: menuItems,
+      adjustedProducts: [],
+    };
   }
 
-  return baseItems.map((baseItem) => {
-    const geminiItem = geminiMap.get(normalizeName(baseItem.productName));
+  const preferenceMap = new Map();
 
-    if (!geminiItem) {
-      return baseItem;
+  customerPreference.preferredFoodItems.forEach((item, index) => {
+    const productName = String(item.productName || "").trim();
+
+    if (!productName) return;
+
+    preferenceMap.set(normalizeText(productName), {
+      ...item,
+      rank: index + 1,
+    });
+  });
+
+  const adjustedProducts = [];
+
+  const adjustedMenuItems = menuItems.map((item) => {
+    const matchedPreference = preferenceMap.get(normalizeText(item.productName));
+
+    if (!matchedPreference) {
+      return item;
     }
 
+    const adjustmentValue = getPreferenceAdjustmentUnits(
+      matchedPreference.rank || 1
+    );
+
+    const predictedQuantity = Number(item.predictedQuantity || 0);
+    const adjustedQuantity = predictedQuantity + adjustmentValue;
+
+    adjustedProducts.push({
+      productName: item.productName,
+      predictedQuantity,
+      adjustedQuantity,
+      adjustmentValue,
+      adjustmentPercent:
+        predictedQuantity > 0
+          ? Math.round((adjustmentValue / predictedQuantity) * 100 * 100) / 100
+          : 0,
+      preferenceScore: matchedPreference.preferenceScore ?? null,
+      reason: `${item.productName} increased by ${adjustmentValue} units because ${
+        customerPreference.predictedCustomerGroup || "the predicted customer group"
+      } prefers this product.`,
+    });
+
     return {
-      ...baseItem,
-
-      productId: baseItem.productId,
-      itemId: baseItem.itemId,
-      productDbName: baseItem.productDbName,
-
-      productName: baseItem.productName,
-      productImage: baseItem.productImage,
-      categoryName: baseItem.categoryName,
-      price: baseItem.price,
-      availability: baseItem.availability,
-      productType: baseItem.productType,
-
-      predictedQuantity: baseItem.predictedQuantity,
-      adjustedQuantity: baseItem.adjustedQuantity,
-      recommendedProductionQuantity: baseItem.recommendedProductionQuantity,
-
-      confidence: geminiItem.confidence || baseItem.confidence,
-      reliability: baseItem.reliability,
-      predictionType: baseItem.predictionType,
-      evaluationLane: baseItem.evaluationLane,
-      testMape: baseItem.testMape,
-      testWmape: baseItem.testWmape,
-
-      isPreferredForPredictedGroup: baseItem.isPreferredForPredictedGroup,
-      preferenceScore: baseItem.preferenceScore,
-      customerPreferenceRank: baseItem.customerPreferenceRank,
-      customerPreferenceNote: baseItem.customerPreferenceNote,
-      adjustmentReason: baseItem.adjustmentReason,
-
-      managerReviewRequired:
-        typeof geminiItem.managerReviewRequired === "boolean"
-          ? geminiItem.managerReviewRequired
-          : baseItem.managerReviewRequired,
-
-      reason: geminiItem.reason || baseItem.reason,
+      ...item,
+      adjustedQuantity,
+      recommendedProductionQuantity: adjustedQuantity,
+      isPreferredForPredictedGroup: true,
+      preferenceScore: matchedPreference.preferenceScore ?? null,
+      customerPreferenceRank: matchedPreference.rank || null,
+      customerPreferenceNote: `Preferred by predicted customer group: ${
+        customerPreference.predictedCustomerGroup || "Unknown"
+      }`,
+      adjustmentReason: `Preference-based adjustment added ${adjustmentValue} units.`,
     };
   });
-}
-
-function buildCustomerPreferenceSnapshot(customerPreference) {
-  if (!customerPreference) {
-    return {
-      predictionDate: "",
-      predictedCustomerGroup: "",
-      confidencePercentage: 0,
-      candidateScores: [],
-      preferredFoodItems: [],
-      note: "Customer preference prediction was not available.",
-    };
-  }
 
   return {
-    predictionDate: customerPreference.predictionDate || "",
-    predictedCustomerGroup: customerPreference.predictedCustomerGroup || "",
-    confidencePercentage: Number(customerPreference.confidencePercentage || 0),
-    candidateScores: Array.isArray(customerPreference.candidateScores)
-      ? customerPreference.candidateScores
-      : [],
-    preferredFoodItems: Array.isArray(customerPreference.preferredFoodItems)
-      ? customerPreference.preferredFoodItems
-      : [],
-    note: customerPreference.note || "",
+    adjustedMenuItems,
+    adjustedProducts,
   };
+}
+
+function mergeGeminiResultIntoMenuItems(baseItems, geminiMenuItems = []) {
+  const geminiMap = new Map();
+
+  for (const item of geminiMenuItems || []) {
+    geminiMap.set(normalizeText(item.productName), item);
+  }
+
+  return baseItems.map((item) => {
+    const geminiItem = geminiMap.get(normalizeText(item.productName));
+
+    return {
+      ...item,
+      confidence: geminiItem?.confidence || item.confidence,
+      managerReviewRequired:
+        typeof geminiItem?.managerReviewRequired === "boolean"
+          ? geminiItem.managerReviewRequired
+          : item.managerReviewRequired,
+      reason: geminiItem?.reason || item.reason,
+    };
+  });
 }
 
 const generateMenu = async (req, res) => {
@@ -268,44 +290,53 @@ const generateMenu = async (req, res) => {
       });
     }
 
-    const productResult = await enrichPredictionsWithProducts(predictions);
-    const menuEligiblePredictions = getMenuEligibleItems(productResult.enriched);
+    const { enriched, warnings: productWarnings } =
+      await enrichPredictionsWithProducts(predictions);
 
-    const baseMenuItems = buildMenuItemsFromPredictions(menuEligiblePredictions);
-    const baseWarnings = buildWarningsFromPredictions(menuEligiblePredictions);
+    const menuEligibleItems = getMenuEligibleItems(enriched);
+    const baseMenuItems = buildMenuItemsFromPredictions(menuEligibleItems);
+    const baseWarnings = buildWarningsFromPredictions(menuEligibleItems);
 
     let customerPreference = null;
-    const customerPreferenceWarnings = [];
+    let adjustedProducts = [];
+    let adjustedMenuItems = baseMenuItems;
 
     try {
-      customerPreference = await getCustomerMenuPreference({
+      const preferenceResult = await getCustomerMenuPreference({
         predictionDate: finalPredictionDate,
         weatherType: weatherType || "Normal",
         holiday: holiday || "No",
         monthPeriod: finalMonthPeriod,
         topN: 8,
       });
-    } catch (preferenceError) {
-      console.error("Customer preference prediction skipped:", preferenceError);
 
-      customerPreferenceWarnings.push(
-        `Customer preference adjustment skipped: ${preferenceError.message}`
+      customerPreference = {
+        predictionDate: preferenceResult.predictionDate,
+        predictedCustomerGroup: preferenceResult.predictedCustomerGroup,
+        confidencePercentage: preferenceResult.confidencePercentage,
+        candidateScores: preferenceResult.candidateScores || [],
+        preferredFoodItems: preferenceResult.preferredFoodItems || [],
+        note:
+          preferenceResult.note ||
+          "This service predicts the most visiting customer group and returns preferred food items.",
+      };
+
+      const preferenceAdjusted = applyCustomerPreferenceAdjustments(
+        baseMenuItems,
+        customerPreference
+      );
+
+      adjustedMenuItems = preferenceAdjusted.adjustedMenuItems;
+      adjustedProducts = preferenceAdjusted.adjustedProducts;
+    } catch (customerPreferenceError) {
+      console.error(
+        "Customer preference generation skipped/fallback used:",
+        customerPreferenceError
       );
     }
 
-    const { adjustedMenuItems, adjustedProducts } =
-      adjustMenuItemsByCustomerPreference({
-        menuItems: baseMenuItems,
-        customerPreference,
-      });
-
-    const ingredientResult = calculateIngredientRequirements(adjustedMenuItems);
-
-    const baseSummary = buildDefaultSummary(
-      finalPredictionDate,
-      adjustedMenuItems,
-      customerPreference
-    );
+    const { ingredientList, warnings: ingredientWarnings } =
+      calculateIngredientRequirements(adjustedMenuItems);
 
     let geminiMenu = null;
 
@@ -313,34 +344,36 @@ const generateMenu = async (req, res) => {
       geminiMenu = await generateMenuWithGemini({
         predictionDate: finalPredictionDate,
         menuItems: adjustedMenuItems,
-        ingredientList: ingredientResult.ingredientList,
-        customerPreference,
+        ingredientList,
       });
     } catch (geminiError) {
       console.error("Gemini generation skipped/fallback used:", geminiError);
     }
 
-    const finalMenuItems =
-      Array.isArray(geminiMenu?.menuItems) && geminiMenu.menuItems.length > 0
-        ? mergeGeminiMenuItems(adjustedMenuItems, geminiMenu.menuItems)
-        : adjustedMenuItems;
+    const finalMenuItems = mergeGeminiResultIntoMenuItems(
+      adjustedMenuItems,
+      geminiMenu?.menuItems || []
+    );
 
-    const warnings = uniqueWarnings([
+    const summary =
+      geminiMenu?.summary ||
+      buildDefaultSummary(finalPredictionDate, finalMenuItems, customerPreference);
+
+    const warnings = uniqueStrings([
       ...baseWarnings,
-      ...(productResult.warnings || []),
-      ...(ingredientResult.warnings || []),
-      ...customerPreferenceWarnings,
+      ...productWarnings,
+      ...ingredientWarnings,
       ...(Array.isArray(geminiMenu?.warnings) ? geminiMenu.warnings : []),
     ]);
 
     const savedMenu = await GeneratedMenu.create({
       menuDate: finalPredictionDate,
       predictions,
-      customerPreference: buildCustomerPreferenceSnapshot(customerPreference),
+      customerPreference: customerPreference || undefined,
       adjustedProducts,
       menuItems: finalMenuItems,
-      ingredientList: ingredientResult.ingredientList,
-      summary: geminiMenu?.summary || baseSummary,
+      ingredientList,
+      summary,
       warnings,
       rawGeminiResponse: geminiMenu || {},
       status: "draft",

@@ -22,9 +22,8 @@ services:
     ports:
       - "8001:8001"
     volumes:
-      volumes:
-        - ./backend/services/nilmini_ml_api/daily_product_sales_history_wide.csv:/app/daily_product_sales_history_wide.csv
-        - ./backend/services/nilmini_ml_api/product_demand_forecast_training_dataset.csv:/app/product_demand_forecast_training_dataset.csv
+      - ./backend/services/nilmini_ml_api/daily_product_sales_history_wide.csv:/app/daily_product_sales_history_wide.csv
+      - ./backend/services/nilmini_ml_api/product_demand_forecast_training_dataset.csv:/app/product_demand_forecast_training_dataset.csv
     networks:
       - nilmini-network
     healthcheck:

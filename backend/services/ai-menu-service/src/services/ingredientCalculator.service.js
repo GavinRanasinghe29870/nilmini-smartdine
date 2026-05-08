@@ -1,7 +1,8 @@
 function parseQuantity(value) {
   if (typeof value === "number") return value;
 
-  const match = String(value || "").match(/[\d.]+/);
+  const normalized = String(value || "").replace(/,/g, "").trim();
+  const match = normalized.match(/[\d.]+/);
 
   if (!match) return 0;
 
@@ -9,9 +10,11 @@ function parseQuantity(value) {
 }
 
 function formatQuantity(value, unit) {
-  const rounded = Math.round(value * 100) / 100;
+  const rounded = Math.round(Number(value || 0) * 100) / 100;
 
-  if (!unit) return String(rounded);
+  if (!unit) {
+    return String(rounded);
+  }
 
   return `${rounded} ${unit}`;
 }
@@ -20,22 +23,24 @@ function calculateIngredientRequirements(menuItems) {
   const grouped = new Map();
   const warnings = [];
 
-  for (const item of menuItems) {
+  for (const item of menuItems || []) {
     const productionQuantity = Number(
-      item.adjustedQuantity ?? item.predictedQuantity ?? 0
+      item.recommendedProductionQuantity ??
+        item.adjustedQuantity ??
+        item.predictedQuantity ??
+        0
     );
 
     if (!Array.isArray(item.ingredients) || item.ingredients.length === 0) {
-      warnings.push(`No ingredients found for product '${item.productName}'.`);
       continue;
     }
 
     for (const ingredient of item.ingredients) {
       const ingredientName = String(ingredient.name || "").trim();
       const unit = String(ingredient.unit || "").trim();
-      const quantityPerUnit = parseQuantity(ingredient.quantity);
+      const quantityPerItem = parseQuantity(ingredient.quantity);
 
-      if (!ingredientName || !quantityPerUnit) {
+      if (!ingredientName || !quantityPerItem) {
         continue;
       }
 
@@ -52,7 +57,7 @@ function calculateIngredientRequirements(menuItems) {
 
       const current = grouped.get(key);
 
-      current.requiredQuantityNumber += quantityPerUnit * productionQuantity;
+      current.requiredQuantityNumber += quantityPerItem * productionQuantity;
 
       if (!current.relatedProducts.includes(item.productName)) {
         current.relatedProducts.push(item.productName);
@@ -60,14 +65,16 @@ function calculateIngredientRequirements(menuItems) {
     }
   }
 
-  const ingredientList = Array.from(grouped.values()).map((item) => ({
-    ingredientName: item.ingredientName,
-    requiredQuantityNumber:
-      Math.round(item.requiredQuantityNumber * 100) / 100,
-    unit: item.unit,
-    requiredQuantity: formatQuantity(item.requiredQuantityNumber, item.unit),
-    relatedProducts: item.relatedProducts,
-  }));
+  const ingredientList = Array.from(grouped.values())
+    .map((item) => ({
+      ingredientName: item.ingredientName,
+      requiredQuantityNumber:
+        Math.round(item.requiredQuantityNumber * 100) / 100,
+      unit: item.unit,
+      requiredQuantity: formatQuantity(item.requiredQuantityNumber, item.unit),
+      relatedProducts: item.relatedProducts,
+    }))
+    .sort((a, b) => a.ingredientName.localeCompare(b.ingredientName));
 
   return {
     ingredientList,

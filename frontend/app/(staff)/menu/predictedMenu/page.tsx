@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Loader2, Sparkles, UsersRound } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  Sparkles,
+  UsersRound,
+  ClipboardList,
+} from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 
@@ -18,6 +24,7 @@ import type {
   GeneratedAiMenuItem,
 } from "../../../src/types/aiMenu";
 import type { ProductDto } from "../../../src/types/product";
+import IngredientListModal from "../IngredientListModal";
 
 type MenuItem = {
   id: string;
@@ -164,6 +171,7 @@ export default function PredictedMenuPage() {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [ingredientModalOpen, setIngredientModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(new Date());
 
@@ -197,7 +205,7 @@ export default function PredictedMenuPage() {
       const productData = await getProducts();
       setProducts(productData || []);
     } catch {
-      // Keep page usable even if product refresh fails.
+      // keep page usable even if product refresh fails
     }
   };
 
@@ -418,6 +426,8 @@ export default function PredictedMenuPage() {
     },
   ];
 
+  const ingredientList = selectedMenu?.ingredientList || [];
+
   return (
     <main className="flex-1 p-8">
       <div className="flex items-center gap-3 mb-6">
@@ -478,25 +488,36 @@ export default function PredictedMenuPage() {
         </div>
       )}
 
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
         <h2 className="text-h5 font-medium">
           Menu Items{" "}
           <span className="text-gray-400">({tomorrowMenu.length})</span>
         </h2>
 
-        <button
-          onClick={handleGenerateTomorrowMenu}
-          disabled={generating}
-          className="flex items-center gap-2 px-4 py-2 bg-bg-2 text-text-white rounded-lg hover:bg-bg-1 transition disabled:opacity-60"
-        >
-          {generating ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <Sparkles size={16} />
-          )}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setIngredientModalOpen(true)}
+            disabled={ingredientList.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-bg-2 text-text-white rounded-lg hover:bg-bg-1 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ClipboardList size={16} />
+            Ingredient List
+          </button>
 
-          {generating ? "Generating..." : "Generate AI Menu"}
-        </button>
+          <button
+            onClick={handleGenerateTomorrowMenu}
+            disabled={generating}
+            className="flex items-center gap-2 px-4 py-2 bg-bg-2 text-text-white rounded-lg hover:bg-bg-1 transition disabled:opacity-60"
+          >
+            {generating ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Sparkles size={16} />
+            )}
+
+            {generating ? "Generating..." : "Generate AI Menu"}
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -618,6 +639,13 @@ export default function PredictedMenuPage() {
           </div>
         </div>
       )}
+
+      <IngredientListModal
+        open={ingredientModalOpen}
+        onClose={() => setIngredientModalOpen(false)}
+        menuDate={selectedMenu?.menuDate}
+        ingredientList={ingredientList}
+      />
     </main>
   );
 }
