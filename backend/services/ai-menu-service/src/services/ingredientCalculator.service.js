@@ -22,7 +22,7 @@ function calculateIngredientRequirements(menuItems) {
 
   for (const item of menuItems) {
     const productionQuantity = Number(
-      item.recommendedProductionQuantity || item.predictedQuantity || 0
+      item.adjustedQuantity ?? item.predictedQuantity ?? 0
     );
 
     if (!Array.isArray(item.ingredients) || item.ingredients.length === 0) {

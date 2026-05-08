@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles, UsersRound } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 
@@ -16,19 +16,39 @@ import { GeneratedAiMenu } from "../../../src/types/aiMenu";
 type MenuItem = {
   id: string;
   productName: string;
-  description: string;
+  productImage: string;
   itemId: string;
   predictedQuantity: number;
+  adjustedQuantity: number;
   category: string;
   price: number;
   availability: string;
   confidence: string;
+  isPreferredForPredictedGroup: boolean;
+  customerPreferenceNote: string;
 };
 
 const TIME_ZONE = "Asia/Colombo";
 
 const fallbackImage =
   "https://images.getrecipekit.com/20220308185802-chicken_parm.jpeg?aspect_ratio=16:9&quality=90";
+
+const API_ORIGIN =
+  process.env.NEXT_PUBLIC_API_ORIGIN || "http://localhost:5000";
+
+function getImageUrl(image?: string) {
+  if (!image) return fallbackImage;
+
+  if (image.startsWith("http://") || image.startsWith("https://")) {
+    return image;
+  }
+
+  if (image.startsWith("/uploads")) {
+    return `${API_ORIGIN}${image}`;
+  }
+
+  return image;
+}
 
 function getColomboDateString(offsetDays = 0) {
   const now = new Date();
@@ -60,6 +80,11 @@ function isAfterFivePmColombo(date = new Date()) {
   const minute = Number(parts.find((p) => p.type === "minute")?.value || 0);
 
   return hour > 17 || (hour === 17 && minute >= 0);
+}
+
+function formatNumber(value: number) {
+  const rounded = Math.round(Number(value || 0) * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
 export default function PredictedMenuPage() {
@@ -109,6 +134,7 @@ export default function PredictedMenuPage() {
         predictionDate: getColomboDateString(1),
         weatherType: "Normal",
         holiday: "No",
+        forceRegenerate: true,
       });
 
       if (!result.success) {
@@ -169,19 +195,61 @@ export default function PredictedMenuPage() {
 
     return selectedMenu.menuItems.map((item, index) => {
       const predictedQuantity = Number(item.predictedQuantity || 0);
+      const adjustedQuantity = Number(
+        item.adjustedQuantity ?? item.predictedQuantity ?? 0
+      );
 
       return {
         id: item._id || `${selectedMenu._id}-${index}`,
         productName: item.productName,
-        description: "",
+        productImage: item.productImage || "",
         itemId: `#AI-${String(index + 1).padStart(4, "0")}`,
         predictedQuantity,
-        category: "AI Menu",
-        price: 0,
-        availability: "In Stock",
+        adjustedQuantity,
+        category: item.categoryName || "AI Menu",
+        price: Number(item.price || 0),
+        availability: item.availability || "In Stock",
         confidence: item.confidence || "Review",
+        isPreferredForPredictedGroup: Boolean(
+          item.isPreferredForPredictedGroup
+        ),
+        customerPreferenceNote: item.customerPreferenceNote || "",
       };
     });
+  }, [selectedMenu]);
+
+  const adjustedProducts = useMemo(() => {
+    if (Array.isArray(selectedMenu?.adjustedProducts)) {
+      return selectedMenu.adjustedProducts;
+    }
+
+    if (!selectedMenu?.menuItems) return [];
+
+    return selectedMenu.menuItems
+      .map((item) => {
+        const predictedQuantity = Number(item.predictedQuantity || 0);
+        const adjustedQuantity = Number(
+          item.adjustedQuantity ?? item.predictedQuantity ?? 0
+        );
+
+        return {
+          productName: item.productName,
+          predictedQuantity,
+          adjustedQuantity,
+          adjustmentValue: adjustedQuantity - predictedQuantity,
+          adjustmentPercent:
+            predictedQuantity > 0
+              ? ((adjustedQuantity - predictedQuantity) / predictedQuantity) *
+                100
+              : 0,
+          preferenceScore: item.preferenceScore,
+          reason:
+            item.adjustmentReason ||
+            item.customerPreferenceNote ||
+            "Adjusted based on customer preference.",
+        };
+      })
+      .filter((item) => Math.abs(item.adjustmentValue) > 0);
   }, [selectedMenu]);
 
   const columns: Column<MenuItem>[] = [
@@ -192,7 +260,7 @@ export default function PredictedMenuPage() {
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-lg overflow-hidden bg-bg-1 relative">
             <Image
-              src={fallbackImage}
+              src={getImageUrl(row.productImage)}
               alt={row.productName}
               fill
               unoptimized
@@ -202,6 +270,12 @@ export default function PredictedMenuPage() {
 
           <div>
             <p className="font-medium text-text-white">{row.productName}</p>
+
+            {row.isPreferredForPredictedGroup && (
+              <p className="text-xs text-primary mt-1">
+                Preferred by predicted customer group
+              </p>
+            )}
           </div>
         </div>
       ),
@@ -209,16 +283,26 @@ export default function PredictedMenuPage() {
     { key: "itemId", label: "Item ID", align: "center" },
     {
       key: "predictedQuantity",
-      label: "Predicted Quantity",
+      label: "ML Predicted",
       align: "center",
-      render: (r) => `${r.predictedQuantity} items`,
+      render: (r) => `${formatNumber(r.predictedQuantity)} items`,
+    },
+    {
+      key: "adjustedQuantity",
+      label: "Final Menu Quantity",
+      align: "center",
+      render: (r) => (
+        <span className="text-primary font-medium">
+          {formatNumber(r.adjustedQuantity)} items
+        </span>
+      ),
     },
     { key: "category", label: "Category", align: "center" },
     {
       key: "price",
       label: "Price",
       align: "right",
-      render: (r) => (r.price > 0 ? `$${r.price.toFixed(2)}` : "-"),
+      render: (r) => (r.price > 0 ? `Rs. ${r.price.toFixed(2)}` : "-"),
     },
     {
       key: "confidence",
@@ -339,6 +423,71 @@ export default function PredictedMenuPage() {
           >
             {generating ? "Generating..." : "Generate Tomorrow Menu"}
           </button>
+        </div>
+      )}
+
+      {selectedMenu && tomorrowMenu.length > 0 && (
+        <div className="mt-6 rounded-xl bg-bg-2 border border-white/10 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <UsersRound size={18} className="text-primary" />
+            <h3 className="text-base font-semibold text-text-white">
+              Customer Preference Adjustment
+            </h3>
+          </div>
+
+          <p className="text-sm text-gray-300">
+            Tomorrow most visiting customer group:{" "}
+            <span className="text-primary font-medium">
+              {selectedMenu.customerPreference?.predictedCustomerGroup ||
+                "Not available"}
+            </span>
+          </p>
+
+          {typeof selectedMenu.customerPreference?.confidencePercentage ===
+            "number" && (
+            <p className="text-xs text-gray-400 mt-1">
+              Confidence:{" "}
+              {selectedMenu.customerPreference.confidencePercentage.toFixed(2)}%
+            </p>
+          )}
+
+          <div className="mt-4">
+            <p className="text-sm font-medium text-text-white mb-2">
+              Adjusted products
+            </p>
+
+            {adjustedProducts.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {adjustedProducts.map((item) => (
+                  <div
+                    key={item.productName}
+                    className="rounded-lg bg-bg-1 px-4 py-3 border border-white/5"
+                  >
+                    <p className="text-sm font-medium text-text-white">
+                      {item.productName}
+                    </p>
+
+                    <p className="text-xs text-gray-400 mt-1">
+                      ML: {formatNumber(item.predictedQuantity)} → Final:{" "}
+                      <span className="text-primary">
+                        {formatNumber(item.adjustedQuantity)}
+                      </span>
+                    </p>
+
+                    <p className="text-xs text-gray-500 mt-1">
+                      Change: {formatNumber(item.adjustmentValue)} items (
+                      {formatNumber(item.adjustmentPercent)}%)
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">
+                No product quantity was adjusted by Gemini for this generated
+                menu.
+              </p>
+            )}
+          </div>
         </div>
       )}
 

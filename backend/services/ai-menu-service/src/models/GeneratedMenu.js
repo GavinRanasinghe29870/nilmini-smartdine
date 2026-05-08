@@ -37,6 +37,43 @@ const generatedMenuSchema = new mongoose.Schema(
       },
     ],
 
+    customerPreference: {
+      predictionDate: String,
+      predictedCustomerGroup: String,
+      confidencePercentage: Number,
+      candidateScores: [
+        {
+          customerGroup: String,
+          predictedScore: Number,
+          normalizedScorePercentage: Number,
+        },
+      ],
+      preferredFoodItems: [
+        {
+          productName: String,
+          preferenceScore: Number,
+          totalUnitsByGroup: mongoose.Schema.Types.Mixed,
+          groupProductShare: mongoose.Schema.Types.Mixed,
+        },
+      ],
+      note: {
+        type: String,
+        default: "",
+      },
+    },
+
+    adjustedProducts: [
+      {
+        productName: String,
+        predictedQuantity: Number,
+        adjustedQuantity: Number,
+        adjustmentValue: Number,
+        adjustmentPercent: Number,
+        preferenceScore: mongoose.Schema.Types.Mixed,
+        reason: String,
+      },
+    ],
+
     menuItems: [
       {
         productId: String,
@@ -48,6 +85,7 @@ const generatedMenuSchema = new mongoose.Schema(
         productType: String,
 
         predictedQuantity: Number,
+        adjustedQuantity: Number,
         recommendedProductionQuantity: Number,
 
         confidence: String,
@@ -56,6 +94,27 @@ const generatedMenuSchema = new mongoose.Schema(
         evaluationLane: String,
         testMape: mongoose.Schema.Types.Mixed,
         testWmape: mongoose.Schema.Types.Mixed,
+
+        isPreferredForPredictedGroup: {
+          type: Boolean,
+          default: false,
+        },
+        preferenceScore: {
+          type: mongoose.Schema.Types.Mixed,
+          default: null,
+        },
+        customerPreferenceRank: {
+          type: mongoose.Schema.Types.Mixed,
+          default: null,
+        },
+        customerPreferenceNote: {
+          type: String,
+          default: "",
+        },
+        adjustmentReason: {
+          type: String,
+          default: "",
+        },
 
         managerReviewRequired: {
           type: Boolean,

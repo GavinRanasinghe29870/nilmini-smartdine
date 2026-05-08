@@ -1,0 +1,169 @@
+customer_age_group,product_name,total_units_by_group,group_product_share,overall_product_share,preference_score
+Elders,Yogurt,168.0,0.006669,0.001285,5.189889
+Elders,Wade,7.0,0.000278,5.4e-05,5.189889
+Elders,Cream Bun,322.0,0.012782,0.002509,5.094952
+Elders,Buns,142.0,0.005637,0.001117,5.0477
+Elders,Roast Bread,1621.0,0.064348,0.029662,2.169368
+Elders,Kahata,1530.0,0.060736,0.035391,1.716129
+Elders,Bulath Vita,1320.0,0.0524,0.031651,1.655547
+Elders,Ulundu Wade,3583.0,0.142233,0.097538,1.458232
+Elders,Bread,128.0,0.005081,0.003499,1.452035
+Elders,Halapa,377.0,0.014966,0.011619,1.288077
+Elders,Plain Tea,4035.0,0.160176,0.125166,1.279712
+Elders,Rolls,2780.0,0.110357,0.093691,1.177883
+Elders,Milo Tea,104.0,0.004128,0.003549,1.163251
+Elders,Tea,978.0,0.038823,0.033426,1.16149
+Elders,Vegitable Roti,799.0,0.031718,0.030274,1.047681
+Elders,Egg Bun,10.0,0.000397,0.000444,0.894808
+Elders,String Hoppers,2819.0,0.111905,0.12899,0.867546
+Elders,Flat Bread,52.0,0.002064,0.002516,0.820286
+Elders,Dal Curry,262.0,0.010401,0.012873,0.807933
+Elders,Hoppers,939.0,0.037275,0.047507,0.784625
+Elders,Roti,292.0,0.011591,0.017218,0.673233
+Elders,Fish Bun,346.0,0.013735,0.020484,0.670538
+Elders,Milk Toffee,47.0,0.001866,0.003037,0.61442
+Elders,Sesame Roll,29.0,0.001151,0.001966,0.58563
+Elders,Cigarette,837.0,0.033226,0.063072,0.526793
+Elders,Milk Plain Tea,7.0,0.000278,0.000558,0.497661
+Elders,Soft Drinks,584.0,0.023183,0.048555,0.477457
+Elders,Soft Drinks Cup,34.0,0.00135,0.002838,0.475623
+Elders,Spanchi,16.0,0.000635,0.001453,0.437043
+Elders,Beedi,134.0,0.005319,0.012835,0.414449
+Elders,Egg Rotti,757.0,0.03005,0.080933,0.371302
+Elders,Milk Packet,114.0,0.004525,0.012758,0.354705
+Elders,Boil Egg,5.0,0.000198,0.000765,0.259494
+Elders,Coffee,4.0,0.000159,0.00075,0.211832
+Elders,Pancake,2.0,7.9e-05,0.000688,0.115331
+Elders,Lavariya,4.0,0.000159,0.005943,0.026718
+Elders,Breakfast,3.0,0.000119,0.018189,0.006547
+Elders,Bite Packet,0.0,0.0,9.2e-05,0.0
+Elders,Chicken Curry,0.0,0.0,0.004314,0.0
+Elders,Jam Bun,0.0,0.0,0.002624,0.0
+Elders,Rock Cake,0.0,0.0,0.000107,0.0
+Elders,Watter Bottle,0.0,0.0,0.008062,0.0
+School Children,Soft Drinks,1175.0,0.189333,0.048555,3.899354
+School Children,Soft Drinks Cup,61.0,0.009829,0.002838,3.463759
+School Children,Milk Toffee,62.0,0.00999,0.003037,3.289977
+School Children,Rolls,1413.0,0.227683,0.093691,2.430151
+School Children,Fish Bun,297.0,0.047857,0.020484,2.336348
+School Children,Roast Bread,406.0,0.065421,0.029662,2.205515
+School Children,Egg Rotti,1101.0,0.177409,0.080933,2.192059
+School Children,Milk Packet,146.0,0.023526,0.012758,1.843947
+School Children,Flat Bread,25.0,0.004028,0.002516,1.600795
+School Children,Vegitable Roti,267.0,0.043023,0.030274,1.421108
+School Children,Ulundu Wade,608.0,0.09797,0.097538,1.004424
+School Children,Tea,155.0,0.024976,0.033426,0.747209
+School Children,Milo Tea,16.0,0.002578,0.003549,0.72643
+School Children,Roti,69.0,0.011118,0.017218,0.645751
+School Children,Plain Tea,304.0,0.048985,0.125166,0.391359
+School Children,String Hoppers,100.0,0.016113,0.12899,0.12492
+School Children,Hoppers,1.0,0.000161,0.047507,0.003392
+School Children,Beedi,0.0,0.0,0.012835,0.0
+School Children,Bite Packet,0.0,0.0,9.2e-05,0.0
+School Children,Boil Egg,0.0,0.0,0.000765,0.0
+School Children,Bread,0.0,0.0,0.003499,0.0
+School Children,Breakfast,0.0,0.0,0.018189,0.0
+School Children,Bulath Vita,0.0,0.0,0.031651,0.0
+School Children,Buns,0.0,0.0,0.001117,0.0
+School Children,Chicken Curry,0.0,0.0,0.004314,0.0
+School Children,Cigarette,0.0,0.0,0.063072,0.0
+School Children,Coffee,0.0,0.0,0.00075,0.0
+School Children,Cream Bun,0.0,0.0,0.002509,0.0
+School Children,Dal Curry,0.0,0.0,0.012873,0.0
+School Children,Egg Bun,0.0,0.0,0.000444,0.0
+School Children,Halapa,0.0,0.0,0.011619,0.0
+School Children,Jam Bun,0.0,0.0,0.002624,0.0
+School Children,Kahata,0.0,0.0,0.035391,0.0
+School Children,Lavariya,0.0,0.0,0.005943,0.0
+School Children,Milk Plain Tea,0.0,0.0,0.000558,0.0
+School Children,Pancake,0.0,0.0,0.000688,0.0
+School Children,Rock Cake,0.0,0.0,0.000107,0.0
+School Children,Sesame Roll,0.0,0.0,0.001966,0.0
+School Children,Spanchi,0.0,0.0,0.001453,0.0
+School Children,Wade,0.0,0.0,5.4e-05,0.0
+School Children,Watter Bottle,0.0,0.0,0.008062,0.0
+School Children,Yogurt,0.0,0.0,0.001285,0.0
+Younger Adults,Jam Bun,343.0,0.006756,0.002624,2.575189
+Younger Adults,Boil Egg,80.0,0.001576,0.000765,2.060151
+Younger Adults,Beedi,1210.0,0.023834,0.012835,1.85696
+Younger Adults,Bread,328.0,0.006461,0.003499,1.846256
+Younger Adults,Breakfast,1694.0,0.033367,0.018189,1.83447
+Younger Adults,Coffee,67.0,0.00132,0.00075,1.760589
+Younger Adults,Pancake,61.0,0.001202,0.000688,1.745406
+Younger Adults,Spanchi,124.0,0.002442,0.001453,1.68065
+Younger Adults,Dal Curry,1090.0,0.02147,0.012873,1.667829
+Younger Adults,Milk Plain Tea,45.0,0.000886,0.000558,1.587445
+Younger Adults,Hoppers,3499.0,0.068921,0.047507,1.450747
+Younger Adults,Roti,1148.0,0.022612,0.017218,1.313335
+Younger Adults,Bulath Vita,2015.0,0.03969,0.031651,1.253989
+Younger Adults,Tea,2019.0,0.039769,0.033426,1.189773
+Younger Adults,Plain Tea,7548.5,0.148685,0.125166,1.187901
+Younger Adults,Halapa,693.0,0.01365,0.011619,1.174856
+Younger Adults,String Hoppers,7634.0,0.150369,0.12899,1.165737
+Younger Adults,Cigarette,3615.0,0.071206,0.063072,1.128949
+Younger Adults,Kahata,1916.0,0.03774,0.035391,1.066363
+Younger Adults,Milo Tea,190.0,0.003742,0.003549,1.054496
+Younger Adults,Egg Rotti,3720.0,0.073274,0.080933,0.905369
+Younger Adults,Egg Bun,20.0,0.000394,0.000444,0.887996
+Younger Adults,Vegitable Roti,1333.0,0.026256,0.030274,0.867288
+Younger Adults,Lavariya,259.0,0.005102,0.005943,0.858396
+Younger Adults,Soft Drinks Cup,112.0,0.002206,0.002838,0.777416
+Younger Adults,Flat Bread,99.0,0.00195,0.002516,0.774905
+Younger Adults,Milk Toffee,118.0,0.002324,0.003037,0.765422
+Younger Adults,Roast Bread,1103.0,0.021726,0.029662,0.732448
+Younger Adults,Sesame Roll,73.0,0.001438,0.001966,0.731474
+Younger Adults,Rolls,3419.0,0.067345,0.093691,0.718799
+Younger Adults,Fish Bun,677.0,0.013335,0.020484,0.651009
+Younger Adults,Ulundu Wade,3025.0,0.059584,0.097538,0.61088
+Younger Adults,Watter Bottle,234.0,0.004609,0.008062,0.571721
+Younger Adults,Soft Drinks,1009.0,0.019875,0.048555,0.40932
+Younger Adults,Milk Packet,248.0,0.004885,0.012758,0.382882
+Younger Adults,Bite Packet,0.0,0.0,9.2e-05,0.0
+Younger Adults,Buns,0.0,0.0,0.001117,0.0
+Younger Adults,Chicken Curry,0.0,0.0,0.004314,0.0
+Younger Adults,Cream Bun,0.0,0.0,0.002509,0.0
+Younger Adults,Rock Cake,0.0,0.0,0.000107,0.0
+Younger Adults,Wade,0.0,0.0,5.4e-05,0.0
+Younger Adults,Yogurt,0.0,0.0,0.001285,0.0
+Youngers,Chicken Curry,564.0,0.011611,0.004314,2.691588
+Youngers,Rock Cake,14.0,0.000288,0.000107,2.691588
+Youngers,Bite Packet,12.0,0.000247,9.2e-05,2.691588
+Youngers,Watter Bottle,820.0,0.016882,0.008062,2.094025
+Youngers,Milk Packet,1160.0,0.023882,0.012758,1.871848
+Youngers,Lavariya,514.0,0.010582,0.005943,1.780536
+Youngers,Sesame Roll,155.0,0.003191,0.001966,1.623331
+Youngers,Soft Drinks,3580.0,0.073703,0.048555,1.51794
+Youngers,Fish Bun,1358.0,0.027958,0.020484,1.36489
+Youngers,Egg Bun,28.0,0.000576,0.000444,1.299387
+Youngers,Egg Rotti,5003.0,0.103,0.080933,1.27266
+Youngers,Flat Bread,153.0,0.00315,0.002516,1.251711
+Youngers,Cigarette,3794.0,0.078109,0.063072,1.238405
+Youngers,Soft Drinks Cup,164.0,0.003376,0.002838,1.189812
+Youngers,Ulundu Wade,5536.0,0.113973,0.097538,1.168494
+Youngers,Milk Toffee,170.0,0.0035,0.003037,1.152569
+Youngers,Vegitable Roti,1559.0,0.032096,0.030274,1.060178
+Youngers,Rolls,4637.0,0.095465,0.093691,1.018932
+Youngers,String Hoppers,6311.0,0.129928,0.12899,1.007271
+Youngers,Milo Tea,154.0,0.00317,0.003549,0.893329
+Youngers,Roti,742.0,0.015276,0.017218,0.887232
+Youngers,Pancake,27.0,0.000556,0.000688,0.807476
+Youngers,Halapa,449.0,0.009244,0.011619,0.795604
+Youngers,Milk Plain Tea,21.0,0.000432,0.000558,0.774292
+Youngers,Breakfast,681.0,0.01402,0.018189,0.770804
+Youngers,Hoppers,1772.0,0.036481,0.047507,0.767911
+Youngers,Tea,1218.0,0.025076,0.033426,0.750195
+Youngers,Coffee,27.0,0.000556,0.00075,0.74156
+Youngers,Plain Tea,4476.5,0.09216,0.125166,0.736305
+Youngers,Spanchi,50.0,0.001029,0.001453,0.708313
+Youngers,Kahata,1181.0,0.024314,0.035391,0.687004
+Youngers,Beedi,334.0,0.006876,0.012835,0.535751
+Youngers,Dal Curry,331.0,0.006814,0.012873,0.529362
+Youngers,Bulath Vita,803.0,0.016532,0.031651,0.522316
+Youngers,Roast Bread,748.0,0.0154,0.029662,0.519161
+Youngers,Boil Egg,15.0,0.000309,0.000765,0.403738
+Youngers,Buns,4.0,8.2e-05,0.001117,0.073742
+Youngers,Cream Bun,6.0,0.000124,0.002509,0.049236
+Youngers,Bread,1.5,3.1e-05,0.003499,0.008825
+Youngers,Jam Bun,0.0,0.0,0.002624,0.0
+Youngers,Wade,0.0,0.0,5.4e-05,0.0
+Youngers,Yogurt,0.0,0.0,0.001285,0.0

@@ -57,8 +57,17 @@ function buildSafeMenuItems(menuItems = []) {
   return menuItems.map((item) => ({
     productName: item.productName,
     predictedQuantity: Number(item.predictedQuantity || 0),
+    adjustedQuantity: Number(
+      item.adjustedQuantity ??
+        item.recommendedProductionQuantity ??
+        item.predictedQuantity ??
+        0
+    ),
     recommendedProductionQuantity: Number(
-      item.recommendedProductionQuantity ?? item.predictedQuantity ?? 0
+      item.recommendedProductionQuantity ??
+        item.adjustedQuantity ??
+        item.predictedQuantity ??
+        0
     ),
     confidence: item.confidence || item.reliability || "Review",
     reliability: item.reliability || "Review",
@@ -66,6 +75,9 @@ function buildSafeMenuItems(menuItems = []) {
     evaluationLane: item.evaluationLane || "unknown",
     categoryName: item.categoryName || "",
     productType: item.productType || "prepared_food",
+    isPreferredForPredictedGroup: Boolean(item.isPreferredForPredictedGroup),
+    customerPreferenceRank: item.customerPreferenceRank ?? null,
+    adjustmentReason: item.adjustmentReason || "",
   }));
 }
 
@@ -73,6 +85,7 @@ async function generateMenuWithGemini({
   predictionDate,
   menuItems,
   ingredientList,
+  customerPreference,
 }) {
   const { ai, Type } = await getGeminiClient();
 
@@ -80,27 +93,48 @@ async function generateMenuWithGemini({
 
   const safeMenuItems = buildSafeMenuItems(menuItems);
 
+  const preferenceText = customerPreference
+    ? JSON.stringify(
+        {
+          predictionDate: customerPreference.predictionDate,
+          predictedCustomerGroup: customerPreference.predictedCustomerGroup,
+          confidencePercentage: customerPreference.confidencePercentage,
+          preferredFoodItems: customerPreference.preferredFoodItems,
+        },
+        null,
+        2
+      )
+    : "Customer preference prediction was not available.";
+
   const prompt = `
 You are an AI menu planning assistant for Nilmini Hotel.
 
-Generate a clear next-day menu summary, item reasons, and warnings using the ML predictions and calculated ingredient list.
+Generate a clear next-day menu summary, item reasons, and warnings using:
+1. ML product quantity predictions.
+2. Customer group preference adjustment results.
+3. Calculated ingredient list.
 
 Important rules:
 1. Do not change product names.
 2. Do not change predictedQuantity.
-3. Do not change recommendedProductionQuantity.
-4. Do not use ingredients to change predicted quantities.
-5. Do not check inventory stock balance.
-6. Do not invent new products.
-7. Do not remove any provided menu item.
-8. Ingredient quantities are already calculated by the backend. Do not change them.
-9. If reliability is Poor, Review, fallback_only, or unknown, set managerReviewRequired to true.
-10. Return only valid JSON.
-11. Do not add markdown formatting.
+3. Do not change adjustedQuantity.
+4. Do not change recommendedProductionQuantity.
+5. Use recommendedProductionQuantity as the final production quantity.
+6. Do not use ingredients to change predicted quantities.
+7. Do not check inventory stock balance.
+8. Do not invent new products.
+9. Do not remove any provided menu item.
+10. Ingredient quantities are already calculated by the backend. Do not change them.
+11. If reliability is Poor, Review, fallback_only, or unknown, set managerReviewRequired to true.
+12. Return only valid JSON.
+13. Do not add markdown formatting.
 
 Prediction date: ${predictionDate}
 
-ML prediction menu items:
+Customer preference prediction:
+${preferenceText}
+
+ML prediction menu items after customer preference adjustment:
 ${JSON.stringify(safeMenuItems, null, 2)}
 
 Calculated ingredient list:
@@ -132,6 +166,9 @@ ${JSON.stringify(ingredientList || [], null, 2)}
                 predictedQuantity: {
                   type: Type.NUMBER,
                 },
+                adjustedQuantity: {
+                  type: Type.NUMBER,
+                },
                 recommendedProductionQuantity: {
                   type: Type.NUMBER,
                 },
@@ -148,6 +185,7 @@ ${JSON.stringify(ingredientList || [], null, 2)}
               required: [
                 "productName",
                 "predictedQuantity",
+                "adjustedQuantity",
                 "recommendedProductionQuantity",
                 "confidence",
                 "managerReviewRequired",

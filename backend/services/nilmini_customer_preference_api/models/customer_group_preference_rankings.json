@@ -1,0 +1,266 @@
+{
+  "Elders": [
+    {
+      "customer_age_group": "Elders",
+      "product_name": "Yogurt",
+      "total_units_by_group": 168.0,
+      "group_product_share": 0.006669,
+      "overall_product_share": 0.001285,
+      "preference_score": 5.189889
+    },
+    {
+      "customer_age_group": "Elders",
+      "product_name": "Wade",
+      "total_units_by_group": 7.0,
+      "group_product_share": 0.000278,
+      "overall_product_share": 5.4e-05,
+      "preference_score": 5.189889
+    },
+    {
+      "customer_age_group": "Elders",
+      "product_name": "Cream Bun",
+      "total_units_by_group": 322.0,
+      "group_product_share": 0.012782,
+      "overall_product_share": 0.002509,
+      "preference_score": 5.094952
+    },
+    {
+      "customer_age_group": "Elders",
+      "product_name": "Buns",
+      "total_units_by_group": 142.0,
+      "group_product_share": 0.005637,
+      "overall_product_share": 0.001117,
+      "preference_score": 5.0477
+    },
+    {
+      "customer_age_group": "Elders",
+      "product_name": "Roast Bread",
+      "total_units_by_group": 1621.0,
+      "group_product_share": 0.064348,
+      "overall_product_share": 0.029662,
+      "preference_score": 2.169368
+    },
+    {
+      "customer_age_group": "Elders",
+      "product_name": "Kahata",
+      "total_units_by_group": 1530.0,
+      "group_product_share": 0.060736,
+      "overall_product_share": 0.035391,
+      "preference_score": 1.716129
+    },
+    {
+      "customer_age_group": "Elders",
+      "product_name": "Bulath Vita",
+      "total_units_by_group": 1320.0,
+      "group_product_share": 0.0524,
+      "overall_product_share": 0.031651,
+      "preference_score": 1.655547
+    },
+    {
+      "customer_age_group": "Elders",
+      "product_name": "Ulundu Wade",
+      "total_units_by_group": 3583.0,
+      "group_product_share": 0.142233,
+      "overall_product_share": 0.097538,
+      "preference_score": 1.458232
+    }
+  ],
+  "School Children": [
+    {
+      "customer_age_group": "School Children",
+      "product_name": "Soft Drinks",
+      "total_units_by_group": 1175.0,
+      "group_product_share": 0.189333,
+      "overall_product_share": 0.048555,
+      "preference_score": 3.899354
+    },
+    {
+      "customer_age_group": "School Children",
+      "product_name": "Soft Drinks Cup",
+      "total_units_by_group": 61.0,
+      "group_product_share": 0.009829,
+      "overall_product_share": 0.002838,
+      "preference_score": 3.463759
+    },
+    {
+      "customer_age_group": "School Children",
+      "product_name": "Milk Toffee",
+      "total_units_by_group": 62.0,
+      "group_product_share": 0.00999,
+      "overall_product_share": 0.003037,
+      "preference_score": 3.289977
+    },
+    {
+      "customer_age_group": "School Children",
+      "product_name": "Rolls",
+      "total_units_by_group": 1413.0,
+      "group_product_share": 0.227683,
+      "overall_product_share": 0.093691,
+      "preference_score": 2.430151
+    },
+    {
+      "customer_age_group": "School Children",
+      "product_name": "Fish Bun",
+      "total_units_by_group": 297.0,
+      "group_product_share": 0.047857,
+      "overall_product_share": 0.020484,
+      "preference_score": 2.336348
+    },
+    {
+      "customer_age_group": "School Children",
+      "product_name": "Roast Bread",
+      "total_units_by_group": 406.0,
+      "group_product_share": 0.065421,
+      "overall_product_share": 0.029662,
+      "preference_score": 2.205515
+    },
+    {
+      "customer_age_group": "School Children",
+      "product_name": "Egg Rotti",
+      "total_units_by_group": 1101.0,
+      "group_product_share": 0.177409,
+      "overall_product_share": 0.080933,
+      "preference_score": 2.192059
+    },
+    {
+      "customer_age_group": "School Children",
+      "product_name": "Milk Packet",
+      "total_units_by_group": 146.0,
+      "group_product_share": 0.023526,
+      "overall_product_share": 0.012758,
+      "preference_score": 1.843947
+    }
+  ],
+  "Younger Adults": [
+    {
+      "customer_age_group": "Younger Adults",
+      "product_name": "Jam Bun",
+      "total_units_by_group": 343.0,
+      "group_product_share": 0.006756,
+      "overall_product_share": 0.002624,
+      "preference_score": 2.575189
+    },
+    {
+      "customer_age_group": "Younger Adults",
+      "product_name": "Boil Egg",
+      "total_units_by_group": 80.0,
+      "group_product_share": 0.001576,
+      "overall_product_share": 0.000765,
+      "preference_score": 2.060151
+    },
+    {
+      "customer_age_group": "Younger Adults",
+      "product_name": "Beedi",
+      "total_units_by_group": 1210.0,
+      "group_product_share": 0.023834,
+      "overall_product_share": 0.012835,
+      "preference_score": 1.85696
+    },
+    {
+      "customer_age_group": "Younger Adults",
+      "product_name": "Bread",
+      "total_units_by_group": 328.0,
+      "group_product_share": 0.006461,
+      "overall_product_share": 0.003499,
+      "preference_score": 1.846256
+    },
+    {
+      "customer_age_group": "Younger Adults",
+      "product_name": "Breakfast",
+      "total_units_by_group": 1694.0,
+      "group_product_share": 0.033367,
+      "overall_product_share": 0.018189,
+      "preference_score": 1.83447
+    },
+    {
+      "customer_age_group": "Younger Adults",
+      "product_name": "Coffee",
+      "total_units_by_group": 67.0,
+      "group_product_share": 0.00132,
+      "overall_product_share": 0.00075,
+      "preference_score": 1.760589
+    },
+    {
+      "customer_age_group": "Younger Adults",
+      "product_name": "Pancake",
+      "total_units_by_group": 61.0,
+      "group_product_share": 0.001202,
+      "overall_product_share": 0.000688,
+      "preference_score": 1.745406
+    },
+    {
+      "customer_age_group": "Younger Adults",
+      "product_name": "Spanchi",
+      "total_units_by_group": 124.0,
+      "group_product_share": 0.002442,
+      "overall_product_share": 0.001453,
+      "preference_score": 1.68065
+    }
+  ],
+  "Youngers": [
+    {
+      "customer_age_group": "Youngers",
+      "product_name": "Chicken Curry",
+      "total_units_by_group": 564.0,
+      "group_product_share": 0.011611,
+      "overall_product_share": 0.004314,
+      "preference_score": 2.691588
+    },
+    {
+      "customer_age_group": "Youngers",
+      "product_name": "Rock Cake",
+      "total_units_by_group": 14.0,
+      "group_product_share": 0.000288,
+      "overall_product_share": 0.000107,
+      "preference_score": 2.691588
+    },
+    {
+      "customer_age_group": "Youngers",
+      "product_name": "Bite Packet",
+      "total_units_by_group": 12.0,
+      "group_product_share": 0.000247,
+      "overall_product_share": 9.2e-05,
+      "preference_score": 2.691588
+    },
+    {
+      "customer_age_group": "Youngers",
+      "product_name": "Watter Bottle",
+      "total_units_by_group": 820.0,
+      "group_product_share": 0.016882,
+      "overall_product_share": 0.008062,
+      "preference_score": 2.094025
+    },
+    {
+      "customer_age_group": "Youngers",
+      "product_name": "Milk Packet",
+      "total_units_by_group": 1160.0,
+      "group_product_share": 0.023882,
+      "overall_product_share": 0.012758,
+      "preference_score": 1.871848
+    },
+    {
+      "customer_age_group": "Youngers",
+      "product_name": "Lavariya",
+      "total_units_by_group": 514.0,
+      "group_product_share": 0.010582,
+      "overall_product_share": 0.005943,
+      "preference_score": 1.780536
+    },
+    {
+      "customer_age_group": "Youngers",
+      "product_name": "Sesame Roll",
+      "total_units_by_group": 155.0,
+      "group_product_share": 0.003191,
+      "overall_product_share": 0.001966,
+      "preference_score": 1.623331
+    },
+    {
+      "customer_age_group": "Youngers",
+      "product_name": "Soft Drinks",
+      "total_units_by_group": 3580.0,
+      "group_product_share": 0.073703,
+      "overall_product_share": 0.048555,
+      "preference_score": 1.51794
+    }
+  ]
+}

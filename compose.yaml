@@ -33,6 +33,61 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+  
+  customer-preference-api:
+    build:
+      context: ./backend/services/nilmini_customer_preference_api
+    container_name: nilmini-customer-preference-api
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Colombo
+      ORDER_SERVICE_URL: http://order-service:5006
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./backend/services/nilmini_customer_preference_api/models:/app/models
+      - ./backend/services/nilmini_customer_preference_api/data:/app/data
+      - ./backend/services/nilmini_customer_preference_api/outputs:/app/outputs
+    depends_on:
+      order-service:
+        condition: service_started
+    networks:
+      - nilmini-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/health', timeout=3).read()\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  customer-preference-retrainer:
+    build:
+      context: ./backend/services/nilmini_customer_preference_api
+    container_name: nilmini-customer-preference-retrainer
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Colombo
+      ORDER_SERVICE_URL: http://order-service:5006
+      RUN_RETRAIN_ON_START: "false"
+      AGGREGATE_TIME: "23:15"
+      PREFERENCE_ANALYZE_TIME: "23:20"
+      RETRAIN_DAYS: "mon,thu"
+      RETRAIN_TIME: "23:30"
+    command: ["python", "scripts/scheduler.py"]
+    volumes:
+      - ./backend/services/nilmini_customer_preference_api/models:/app/models
+      - ./backend/services/nilmini_customer_preference_api/data:/app/data
+      - ./backend/services/nilmini_customer_preference_api/outputs:/app/outputs
+    depends_on:
+      order-service:
+        condition: service_started
+      customer-preference-api:
+        condition: service_healthy
+    networks:
+      - nilmini-network
 
   auth-service:
     build:
@@ -124,12 +179,17 @@ services:
       PRODUCT_SERVICE_URL: http://product-service:5004
       INVENTORY_SERVICE_URL: http://inventory-service:5003
       ORDER_SERVICE_URL: http://order-service:5006
+      CUSTOMER_PREFERENCE_API_URL: http://customer-preference-api:8002
       FRONTEND_ORIGIN: http://localhost:3000
       CLIENT_ORIGIN: http://localhost:3000
+      PREFERENCE_ADJUSTMENT_MIN_UNITS: "10"
+      PREFERENCE_ADJUSTMENT_MAX_UNITS: "15"
     ports:
       - "5005:5005"
     depends_on:
       ml-api:
+        condition: service_healthy
+      customer-preference-api:
         condition: service_healthy
       product-service:
         condition: service_started
