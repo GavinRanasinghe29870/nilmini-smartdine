@@ -12,8 +12,8 @@ import pandas as pd
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 
-DAILY_DATASET_PATH = DATA_DIR / "customer_group_daily_training_dataset.csv"
-PREFERENCE_DATASET_PATH = DATA_DIR / "customer_group_product_preference_dataset.csv"
+DAILY_DATASET_PATH = DATA_DIR / "customer_group_daily_visit_training_dataset.csv"
+PREFERENCE_DATASET_PATH = DATA_DIR / "customer_group_product_preference_training_dataset.csv"
 
 ORDER_SERVICE_URL = os.environ.get("ORDER_SERVICE_URL", "http://order-service:5006")
 

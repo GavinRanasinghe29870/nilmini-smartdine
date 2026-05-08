@@ -77,6 +77,9 @@ const generatedMenuSchema = new mongoose.Schema(
     menuItems: [
       {
         productId: String,
+        itemId: String,
+        productDbName: String,
+
         productName: String,
         productImage: String,
         categoryName: String,

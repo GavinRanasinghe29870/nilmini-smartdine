@@ -54,6 +54,9 @@ function buildMenuItemsFromPredictions(predictions = []) {
 
     return {
       productId: item.productId || "",
+      itemId: item.itemId || "",
+      productDbName: item.productDbName || "",
+
       productName: item.productName,
       productImage: item.productImage || "",
       categoryName: item.categoryName || "",
@@ -153,16 +156,39 @@ function mergeGeminiMenuItems(baseItems, geminiItems = []) {
     return {
       ...baseItem,
 
+      productId: baseItem.productId,
+      itemId: baseItem.itemId,
+      productDbName: baseItem.productDbName,
+
       productName: baseItem.productName,
+      productImage: baseItem.productImage,
+      categoryName: baseItem.categoryName,
+      price: baseItem.price,
+      availability: baseItem.availability,
+      productType: baseItem.productType,
+
       predictedQuantity: baseItem.predictedQuantity,
       adjustedQuantity: baseItem.adjustedQuantity,
       recommendedProductionQuantity: baseItem.recommendedProductionQuantity,
 
       confidence: geminiItem.confidence || baseItem.confidence,
+      reliability: baseItem.reliability,
+      predictionType: baseItem.predictionType,
+      evaluationLane: baseItem.evaluationLane,
+      testMape: baseItem.testMape,
+      testWmape: baseItem.testWmape,
+
+      isPreferredForPredictedGroup: baseItem.isPreferredForPredictedGroup,
+      preferenceScore: baseItem.preferenceScore,
+      customerPreferenceRank: baseItem.customerPreferenceRank,
+      customerPreferenceNote: baseItem.customerPreferenceNote,
+      adjustmentReason: baseItem.adjustmentReason,
+
       managerReviewRequired:
         typeof geminiItem.managerReviewRequired === "boolean"
           ? geminiItem.managerReviewRequired
           : baseItem.managerReviewRequired,
+
       reason: geminiItem.reason || baseItem.reason,
     };
   });

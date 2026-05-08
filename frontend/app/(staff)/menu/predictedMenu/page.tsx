@@ -11,7 +11,13 @@ import {
   generateAiMenu,
   getGeneratedAiMenus,
 } from "../../../src/lib/api/aiMenu.api";
-import { GeneratedAiMenu } from "../../../src/types/aiMenu";
+import { getImageSrc, getProducts } from "../../../src/lib/api/product.api";
+import type {
+  AdjustedProduct,
+  GeneratedAiMenu,
+  GeneratedAiMenuItem,
+} from "../../../src/types/aiMenu";
+import type { ProductDto } from "../../../src/types/product";
 
 type MenuItem = {
   id: string;
@@ -23,31 +29,74 @@ type MenuItem = {
   category: string;
   price: number;
   availability: string;
-  confidence: string;
   isPreferredForPredictedGroup: boolean;
   customerPreferenceNote: string;
 };
 
 const TIME_ZONE = "Asia/Colombo";
+const fallbackImage = "/images/placeholder.png";
 
-const fallbackImage =
-  "https://images.getrecipekit.com/20220308185802-chicken_parm.jpeg?aspect_ratio=16:9&quality=90";
+function normalizeText(value?: string) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-z0-9\s#]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-const API_ORIGIN =
-  process.env.NEXT_PUBLIC_API_ORIGIN || "http://localhost:5000";
+function compactText(value?: string) {
+  return normalizeText(value).replace(/\s+/g, "");
+}
 
-function getImageUrl(image?: string) {
-  if (!image) return fallbackImage;
+function getMatchKeys(value?: string) {
+  const normalized = normalizeText(value);
+  const compact = compactText(value);
 
-  if (image.startsWith("http://") || image.startsWith("https://")) {
-    return image;
+  const keys = new Set<string>();
+
+  if (normalized) keys.add(normalized);
+  if (compact) keys.add(compact);
+
+  return keys;
+}
+
+function buildProductMap(products: ProductDto[]) {
+  const map = new Map<string, ProductDto>();
+
+  for (const product of products) {
+    const productNameKeys = getMatchKeys(product.name);
+    const itemIdKeys = getMatchKeys(product.itemId);
+
+    for (const key of [...productNameKeys, ...itemIdKeys]) {
+      if (!map.has(key)) {
+        map.set(key, product);
+      }
+    }
   }
 
-  if (image.startsWith("/uploads")) {
-    return `${API_ORIGIN}${image}`;
+  return map;
+}
+
+function findProductForMenuItem(
+  productMap: Map<string, ProductDto>,
+  item: GeneratedAiMenuItem
+) {
+  const possibleValues = [item.productName, item.productDbName, item.itemId];
+
+  for (const value of possibleValues) {
+    for (const key of getMatchKeys(value)) {
+      const product = productMap.get(key);
+
+      if (product) {
+        return product;
+      }
+    }
   }
 
-  return image;
+  return null;
 }
 
 function getColomboDateString(offsetDays = 0) {
@@ -87,6 +136,20 @@ function formatNumber(value: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
+function getFinalItemId(
+  menuItem: GeneratedAiMenuItem,
+  matchedProduct: ProductDto | null,
+  index: number
+) {
+  const productItemId = String(matchedProduct?.itemId || "").trim();
+  const menuItemId = String(menuItem.itemId || "").trim();
+
+  if (productItemId) return productItemId;
+  if (menuItemId) return menuItemId;
+
+  return `#AI-${String(index + 1).padStart(4, "0")}`;
+}
+
 export default function PredictedMenuPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -97,6 +160,7 @@ export default function PredictedMenuPage() {
   const [selectedMenu, setSelectedMenu] = useState<GeneratedAiMenu | null>(
     null
   );
+  const [products, setProducts] = useState<ProductDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -105,25 +169,37 @@ export default function PredictedMenuPage() {
 
   const canApprove = isAfterFivePmColombo(now);
 
-  const fetchLatestGeneratedMenu = useCallback(async () => {
+  const fetchPageData = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
-      const result = await getGeneratedAiMenus();
+      const [menuResult, productData] = await Promise.all([
+        getGeneratedAiMenus(),
+        getProducts(),
+      ]);
 
-      if (!result.success) {
-        throw new Error(result.message || "Failed to fetch generated menus");
+      if (!menuResult.success) {
+        throw new Error(menuResult.message || "Failed to fetch generated menus");
       }
 
-      const latestMenu = result.data?.[0] || null;
-      setSelectedMenu(latestMenu);
+      setSelectedMenu(menuResult.data?.[0] || null);
+      setProducts(productData || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const refreshProducts = async () => {
+    try {
+      const productData = await getProducts();
+      setProducts(productData || []);
+    } catch {
+      // Keep page usable even if product refresh fails.
+    }
+  };
 
   const handleGenerateTomorrowMenu = async () => {
     try {
@@ -142,6 +218,7 @@ export default function PredictedMenuPage() {
       }
 
       setSelectedMenu(result.data);
+      await refreshProducts();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -179,8 +256,8 @@ export default function PredictedMenuPage() {
   };
 
   useEffect(() => {
-    fetchLatestGeneratedMenu();
-  }, [fetchLatestGeneratedMenu]);
+    fetchPageData();
+  }, [fetchPageData]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -190,35 +267,44 @@ export default function PredictedMenuPage() {
     return () => clearInterval(timer);
   }, []);
 
+  const productMap = useMemo(() => {
+    return buildProductMap(products);
+  }, [products]);
+
   const tomorrowMenu: MenuItem[] = useMemo(() => {
     if (!selectedMenu?.menuItems) return [];
 
     return selectedMenu.menuItems.map((item, index) => {
+      const matchedProduct = findProductForMenuItem(productMap, item);
+
       const predictedQuantity = Number(item.predictedQuantity || 0);
       const adjustedQuantity = Number(
-        item.adjustedQuantity ?? item.predictedQuantity ?? 0
+        item.adjustedQuantity ??
+          item.recommendedProductionQuantity ??
+          item.predictedQuantity ??
+          0
       );
+
+      const productImage = matchedProduct?.image || item.productImage || "";
 
       return {
         id: item._id || `${selectedMenu._id}-${index}`,
-        productName: item.productName,
-        productImage: item.productImage || "",
-        itemId: `#AI-${String(index + 1).padStart(4, "0")}`,
+        productName: item.productName || matchedProduct?.name || "Unknown Product",
+        productImage,
+        itemId: getFinalItemId(item, matchedProduct, index),
         predictedQuantity,
         adjustedQuantity,
-        category: item.categoryName || "AI Menu",
-        price: Number(item.price || 0),
-        availability: item.availability || "In Stock",
-        confidence: item.confidence || "Review",
-        isPreferredForPredictedGroup: Boolean(
-          item.isPreferredForPredictedGroup
-        ),
+        category: matchedProduct?.categoryName || item.categoryName || "AI Menu",
+        price: Number(matchedProduct?.price ?? item.price ?? 0),
+        availability:
+          matchedProduct?.availability || item.availability || "In Stock",
+        isPreferredForPredictedGroup: Boolean(item.isPreferredForPredictedGroup),
         customerPreferenceNote: item.customerPreferenceNote || "",
       };
     });
-  }, [selectedMenu]);
+  }, [selectedMenu, productMap]);
 
-  const adjustedProducts = useMemo(() => {
+  const adjustedProducts = useMemo<AdjustedProduct[]>(() => {
     if (Array.isArray(selectedMenu?.adjustedProducts)) {
       return selectedMenu.adjustedProducts;
     }
@@ -229,11 +315,14 @@ export default function PredictedMenuPage() {
       .map((item) => {
         const predictedQuantity = Number(item.predictedQuantity || 0);
         const adjustedQuantity = Number(
-          item.adjustedQuantity ?? item.predictedQuantity ?? 0
+          item.adjustedQuantity ??
+            item.recommendedProductionQuantity ??
+            item.predictedQuantity ??
+            0
         );
 
         return {
-          productName: item.productName,
+          productName: item.productName || "Unknown Product",
           predictedQuantity,
           adjustedQuantity,
           adjustmentValue: adjustedQuantity - predictedQuantity,
@@ -256,44 +345,51 @@ export default function PredictedMenuPage() {
     {
       key: "product",
       label: "Product",
-      render: (row) => (
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-lg overflow-hidden bg-bg-1 relative">
-            <Image
-              src={getImageUrl(row.productImage)}
-              alt={row.productName}
-              fill
-              unoptimized
-              className="object-cover"
-            />
-          </div>
+      render: (row) => {
+        const imageSrc = getImageSrc(row.productImage, fallbackImage);
 
-          <div>
-            <p className="font-medium text-text-white">{row.productName}</p>
+        return (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-lg overflow-hidden bg-bg-1 relative">
+              <Image
+                src={imageSrc}
+                alt={row.productName}
+                fill
+                unoptimized
+                className="object-cover"
+                onError={(event) => {
+                  event.currentTarget.src = fallbackImage;
+                }}
+              />
+            </div>
 
-            {row.isPreferredForPredictedGroup && (
-              <p className="text-xs text-primary mt-1">
-                Preferred by predicted customer group
-              </p>
-            )}
+            <div>
+              <p className="font-medium text-text-white">{row.productName}</p>
+
+              {row.isPreferredForPredictedGroup && (
+                <p className="text-xs text-primary mt-1">
+                  Preferred by predicted customer group
+                </p>
+              )}
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     { key: "itemId", label: "Item ID", align: "center" },
     {
       key: "predictedQuantity",
       label: "ML Predicted",
       align: "center",
-      render: (r) => `${formatNumber(r.predictedQuantity)} items`,
+      render: (row) => `${formatNumber(row.predictedQuantity)} items`,
     },
     {
       key: "adjustedQuantity",
       label: "Final Menu Quantity",
       align: "center",
-      render: (r) => (
+      render: (row) => (
         <span className="text-primary font-medium">
-          {formatNumber(r.adjustedQuantity)} items
+          {formatNumber(row.adjustedQuantity)} items
         </span>
       ),
     },
@@ -302,23 +398,23 @@ export default function PredictedMenuPage() {
       key: "price",
       label: "Price",
       align: "right",
-      render: (r) => (r.price > 0 ? `Rs. ${r.price.toFixed(2)}` : "-"),
-    },
-    {
-      key: "confidence",
-      label: "Confidence",
-      align: "center",
-      render: (r) => (
-        <span className="text-primary font-medium capitalize">
-          {r.confidence}
-        </span>
-      ),
+      render: (row) => (row.price > 0 ? `Rs. ${row.price.toFixed(2)}` : "-"),
     },
     {
       key: "availability",
       label: "Availability",
       align: "center",
-      render: () => <span className="text-primary font-medium">In Stock</span>,
+      render: (row) => (
+        <span
+          className={
+            row.availability === "Out of Stock"
+              ? "text-red-400 font-medium"
+              : "text-primary font-medium"
+          }
+        >
+          {row.availability}
+        </span>
+      ),
     },
   ];
 
@@ -446,7 +542,7 @@ export default function PredictedMenuPage() {
           {typeof selectedMenu.customerPreference?.confidencePercentage ===
             "number" && (
             <p className="text-xs text-gray-400 mt-1">
-              Confidence:{" "}
+              Customer group prediction confidence:{" "}
               {selectedMenu.customerPreference.confidencePercentage.toFixed(2)}%
             </p>
           )}
@@ -483,8 +579,7 @@ export default function PredictedMenuPage() {
               </div>
             ) : (
               <p className="text-sm text-gray-400">
-                No product quantity was adjusted by Gemini for this generated
-                menu.
+                No product quantity was adjusted for this generated menu.
               </p>
             )}
           </div>

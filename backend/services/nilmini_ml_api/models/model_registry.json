@@ -1,6 +1,6 @@
 {
-  "source_file": "04_daily_product_counts_wide.csv",
-  "generated_training_file": "05_demand_forecast_training_long.csv",
+  "source_file": "daily_product_sales_history_wide.csv",
+  "generated_training_file": "product_demand_forecast_training_dataset.csv",
   "target_metric_name": "MAPE",
   "target_metric_threshold": 20.0,
   "model_type": "per_product_feature_template_selection_plus_model_selection",

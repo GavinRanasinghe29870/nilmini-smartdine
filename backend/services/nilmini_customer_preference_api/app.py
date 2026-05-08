@@ -16,7 +16,7 @@ DATA_DIR = BASE_DIR / "data"
 SCRIPTS_DIR = BASE_DIR / "scripts"
 
 REGISTRY_PATH = MODELS_DIR / "customer_group_model_registry.json"
-DAILY_DATA_PATH = DATA_DIR / "customer_group_daily_training_dataset.csv"
+DAILY_DATA_PATH = DATA_DIR / "customer_group_daily_visit_training_dataset.csv"
 PREFERENCE_RANKINGS_PATH = MODELS_DIR / "customer_group_preference_rankings.json"
 RANKER_PATH = MODELS_DIR / "customer_group_ranker.joblib"
 
@@ -237,7 +237,7 @@ def load_daily_data():
     if "date" not in df.columns:
         raise HTTPException(
             status_code=500,
-            detail="customer_group_daily_training_dataset.csv must contain a date column.",
+            detail="customer_group_daily_visit_training_dataset.csv must contain a date column.",
         )
 
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
