@@ -238,6 +238,33 @@ services:
     networks:
       - nilmini-network
 
+  report-service:
+    build:
+      context: ./backend/services/report-service
+    container_name: nilmini-report-service
+    restart: unless-stopped
+    environment:
+      PORT: 5007
+      ORDER_SERVICE_URL: http://order-service:5006
+      PRODUCT_SERVICE_URL: http://product-service:5004
+      INVENTORY_SERVICE_URL: http://inventory-service:5003
+      STAFF_SERVICE_URL: http://staff-service:5002
+      FRONTEND_ORIGIN: http://localhost:3000
+      CLIENT_ORIGIN: http://localhost:3000
+    ports:
+      - "5007:5007"
+    depends_on:
+      order-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      staff-service:
+        condition: service_started
+    networks:
+      - nilmini-network
+
   api-gateway:
     build:
       context: ./backend/api-gateway
@@ -253,6 +280,7 @@ services:
       PRODUCT_SERVICE_URL: http://product-service:5004
       AI_MENU_SERVICE_URL: http://ai-menu-service:5005
       ORDER_SERVICE_URL: http://order-service:5006
+      REPORT_SERVICE_URL: http://report-service:5007
       FRONTEND_ORIGIN: http://localhost:3000
       CLIENT_ORIGIN: http://localhost:3000
       FRONTEND_UPLOAD_DIR: /shared/frontend-uploads
@@ -267,6 +295,7 @@ services:
       - product-service
       - ai-menu-service
       - order-service
+      - report-service
     networks:
       - nilmini-network
 

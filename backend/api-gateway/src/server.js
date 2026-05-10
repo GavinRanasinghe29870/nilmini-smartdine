@@ -16,6 +16,7 @@ const INVENTORY = process.env.INVENTORY_SERVICE_URL || "http://localhost:5003";
 const PRODUCT = process.env.PRODUCT_SERVICE_URL || "http://localhost:5004";
 const AI_MENU = process.env.AI_MENU_SERVICE_URL || "http://localhost:5005";
 const ORDER = process.env.ORDER_SERVICE_URL || "http://localhost:5006";
+const REPORT = process.env.REPORT_SERVICE_URL || "http://localhost:5007";
 
 const FRONTEND = process.env.FRONTEND_ORIGIN || "http://localhost:3000";
 
@@ -60,6 +61,7 @@ app.get("/api/health", (req, res) => {
       product: PRODUCT,
       aiMenu: AI_MENU,
       order: ORDER,
+      report: REPORT,
     },
   });
 });
@@ -165,6 +167,16 @@ app.use(
   })
 );
 
+app.use(
+  "/api/reports",
+  proxy(REPORT, {
+    timeout: PROXY_TIMEOUT,
+    proxyReqPathResolver: (req) => `/api/reports${req.url}`,
+    proxyReqOptDecorator: forwardHeaders,
+    proxyErrorHandler: handleProxyError("report-service"),
+  })
+);
+
 /**
  * ORDER SERVICE ROUTE
  * Do not use express-http-proxy here.
@@ -250,4 +262,5 @@ app.listen(PORT, () => {
   console.log(`Product Service URL: ${PRODUCT}`);
   console.log(`AI Menu Service URL: ${AI_MENU}`);
   console.log(`Order Service URL: ${ORDER}`);
+  console.log(`Report Service URL: ${REPORT}`);
 });
