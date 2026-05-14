@@ -1,16 +1,15 @@
-FROM node:22-alpine
+FROM node:20-alpine
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Install dependencies
 COPY package*.json ./
+
 RUN npm install
 
 COPY . .
 
-# RUN chmod +x run.sh
+ENV NODE_ENV=production
 
-EXPOSE 9000
+EXPOSE 5004
 
-# Start the service
-CMD ["npm", "run", "dev"]
+CMD ["node", "src/server.js"]

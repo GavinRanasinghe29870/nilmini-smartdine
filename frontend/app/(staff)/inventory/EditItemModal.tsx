@@ -1,80 +1,107 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useState } from "react";
-
-export type InventoryItem = {
-  id: number;
-  name: string;
-  itemId: string;
-  quantity: number;
-  cost: number;
-  availability: "In Stock" | "Out of Stock";
-  image: string;
-};
+import { useEffect, useState } from "react";
+import type { InventoryItem, UnitType } from "../../src/types/inventory";
 
 type Props = {
   open: boolean;
   item: InventoryItem | null;
   onClose: () => void;
-  onSave: (updatedItem: InventoryItem) => void;
+  onSave: (id: string, formData: FormData) => Promise<void>;
 };
 
-export default function EditItemModal({
-  open,
-  item,
-  onClose,
-  onSave,
-}: Props) {
-  // Initialize state with item data
-  const [itemName, setItemName] = useState(item?.name || "");
-  const [cost, setCost] = useState(item?.cost ? String(item.cost) : "");
-  const [quantity, setQuantity] = useState(item?.quantity ? String(item.quantity) : "");
-  const [unit, setUnit] = useState("Kg");
-  const [image, setImage] = useState<File | null>(null);
-  const [preview, setPreview] = useState(item?.image || "");
-
-  // Reset form when item changes or modal opens
-  if (open && item && itemName !== item.name) {
-    setItemName(item.name);
-    setCost(String(item.cost));
-    setQuantity(String(item.quantity));
-    setPreview(item.image);
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
   }
+
+  return fallback;
+}
+
+export default function EditItemModal({ open, item, onClose, onSave }: Props) {
+  const [itemName, setItemName] = useState("");
+  const [cost, setCost] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [unit, setUnit] = useState<UnitType>("Kg");
+  const [image, setImage] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open && item) {
+      setItemName(item.name);
+      setCost(String(item.cost));
+      setQuantity(String(item.quantity));
+      setUnit(item.unit);
+      setPreview(item.image || "");
+      setImage(null);
+      setSaving(false);
+      setError("");
+    }
+  }, [open, item]);
 
   if (!open || !item) return null;
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setImage(e.target.files[0]);
-      setPreview(URL.createObjectURL(e.target.files[0]));
+    const file = e.target.files?.[0] || null;
+    setImage(file);
+
+    if (file) {
+      setPreview(URL.createObjectURL(file));
     }
   };
 
-  const handleSave = () => {
-    const updatedItem: InventoryItem = {
-      ...item,
-      name: itemName,
-      cost: Number(cost),
-      quantity: Number(quantity),
-      image: image ? preview : item.image,
-      availability: Number(quantity) > 0 ? "In Stock" : "Out of Stock",
-    };
-    onSave(updatedItem);
-    onClose();
+  const handleSave = async () => {
+    setError("");
+
+    if (!itemName.trim()) {
+      setError("Item name is required");
+      return;
+    }
+
+    if (!cost || Number(cost) < 0) {
+      setError("Valid cost is required");
+      return;
+    }
+
+    if (!quantity || Number(quantity) < 0) {
+      setError("Valid quantity is required");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("name", itemName.trim());
+    formData.append("cost", cost);
+    formData.append("quantity", quantity);
+    formData.append("unit", unit);
+
+    if (image) {
+      formData.append("image", image);
+    }
+
+    try {
+      setSaving(true);
+      await onSave(item.id, formData);
+      onClose();
+    } catch (error: unknown) {
+      setError(getErrorMessage(error, "Failed to update item"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        className="fixed inset-0 bg-bg-1"
-      />
+      <div onClick={onClose} className="fixed inset-0 bg-black/50 z-40" />
 
-      {/* Drawer */}
-      <div className="fixed right-0 top-0 h-full w-[400px] bg-bg-2 text-text-white z-50 overflow-y-auto p-6">
-        {/* Header */}
+      <div className="fixed right-0 top-0 h-full w-full max-w-md bg-bg-2 text-text-white z-50 overflow-y-auto p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold">Edit Item</h2>
           <button onClick={onClose}>
@@ -82,16 +109,27 @@ export default function EditItemModal({
           </button>
         </div>
 
-        {/* Image */}
+        {error ? (
+          <div className="mb-4 rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        ) : null}
+
         <div className="mb-6">
           <label className="block mb-2 text-sm">Image</label>
-          <div className="w-full h-40 bg-bg-2 rounded-lg flex items-center justify-center overflow-hidden">
+          <div className="w-full h-40 bg-bg-1 rounded-lg flex items-center justify-center overflow-hidden">
             {preview ? (
-              <img src={preview} alt="Preview" className="w-full h-full object-cover" />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={preview}
+                alt="Preview"
+                className="w-full h-full object-cover"
+              />
             ) : (
-              <span className="text-gray-500">Select icon here</span>
+              <span className="text-gray-500">Select image here</span>
             )}
           </div>
+
           <input
             type="file"
             accept="image/*"
@@ -100,46 +138,44 @@ export default function EditItemModal({
           />
         </div>
 
-        {/* Item Name */}
         <div className="mb-4">
           <label className="block mb-2 text-sm">Item Name</label>
           <input
             type="text"
             value={itemName}
             onChange={(e) => setItemName(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg bg-bg-2 text-text-white focus:outline-none"
+            className="w-full px-4 py-3 rounded-lg bg-bg-1 text-text-white focus:outline-none"
           />
         </div>
 
-        {/* Cost */}
         <div className="mb-4">
           <label className="block mb-2 text-sm">Cost</label>
           <input
             type="number"
+            min="0"
             value={cost}
             onChange={(e) => setCost(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg bg-bg-2 text-text-white focus:outline-none"
+            className="w-full px-4 py-3 rounded-lg bg-bg-1 text-text-white focus:outline-none"
           />
         </div>
 
-        {/* Quantity */}
         <div className="mb-4">
           <label className="block mb-2 text-sm">Quantity</label>
           <input
             type="number"
+            min="0"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg bg-bg-2text-text-white focus:outline-none"
+            className="w-full px-4 py-3 rounded-lg bg-bg-1 text-text-white focus:outline-none"
           />
         </div>
 
-        {/* Unit */}
         <div className="mb-6">
           <label className="block mb-2 text-sm">Unit type</label>
           <select
             value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg bg-bg-2 text-text-white focus:outline-none"
+            onChange={(e) => setUnit(e.target.value as UnitType)}
+            className="w-full px-4 py-3 rounded-lg bg-bg-1 text-text-white focus:outline-none"
           >
             <option value="Kg">Kg</option>
             <option value="Litre">Litre</option>
@@ -147,19 +183,19 @@ export default function EditItemModal({
           </select>
         </div>
 
-        {/* Actions */}
         <div className="flex gap-4">
           <button
             onClick={onClose}
-            className="flex-1 py-3 rounded-lg bg-bg-2 hover:bg-bg-2"
+            className="flex-1 py-3 rounded-lg bg-bg-1 text-text-white"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 py-3 rounded-lg bg-primary text-text-black font-semibold hover:bg-secondary"
+            disabled={saving}
+            className="flex-1 py-3 rounded-lg bg-primary text-text-black font-semibold disabled:opacity-60"
           >
-            Save Changes
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>

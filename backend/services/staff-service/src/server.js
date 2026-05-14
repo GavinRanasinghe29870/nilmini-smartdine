@@ -1,18 +1,10 @@
-require("dotenv").config({ path: "src/.env" });
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 const app = require("./app");
-const connectDB = require("./config/db");
 
-const port = process.env.PORT || 4001;
+const port = process.env.PORT || 5002;
 
-(async () => {
-  try {
-    await connectDB();
-    app.listen(port, () => {
-      console.log(`Staff service running on port ${port}`);
-    });
-  } catch (err) {
-    console.error("Failed to start staff service:", err.message);
-    process.exit(1);
-  }
-})();
+app.listen(port, () => {
+  console.log(`Staff service running on port ${port}`);
+});

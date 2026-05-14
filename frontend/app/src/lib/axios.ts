@@ -5,7 +5,7 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 
-const BASE_URL = "http://localhost:5000/api";
+export const API_BASE_URL = "http://localhost:5000/api";
 
 type ApiErrorBody = { message?: string };
 
@@ -14,14 +14,19 @@ type RetriableConfig = InternalAxiosRequestConfig & {
 };
 
 export const api: AxiosInstance = axios.create({
-  baseURL: BASE_URL,
+  baseURL: API_BASE_URL,
   timeout: 30000,
   withCredentials: true,
-  headers: { "Content-Type": "application/json" },
+});
+
+const refreshClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+  withCredentials: true,
 });
 
 export async function refresh(): Promise<{ message?: string }> {
-  const res = await api.post<{ message?: string }>("/auth/refresh");
+  const res = await refreshClient.post<{ message?: string }>("/auth/refresh");
   return res.data;
 }
 
@@ -35,6 +40,7 @@ async function ensureRefreshed(): Promise<void> {
   }
 
   isRefreshing = true;
+
   refreshPromise = (async () => {
     await refresh();
   })();
@@ -51,6 +57,29 @@ function getErrorMessage(err: AxiosError<ApiErrorBody>): string {
   return err.response?.data?.message || err.message || "Request failed";
 }
 
+function isAuthRoute(url?: string): boolean {
+  if (!url) return false;
+
+  return (
+    url.includes("/auth/login") ||
+    url.includes("/auth/refresh") ||
+    url.includes("/auth/logout")
+  );
+}
+
+api.interceptors.request.use((config) => {
+  const isFormData =
+    typeof FormData !== "undefined" && config.data instanceof FormData;
+
+  config.headers = config.headers || {};
+
+  if (!isFormData && !config.headers["Content-Type"]) {
+    config.headers["Content-Type"] = "application/json";
+  }
+
+  return config;
+});
+
 api.interceptors.response.use(
   (res: AxiosResponse) => res,
   async (error: AxiosError<ApiErrorBody>) => {
@@ -61,13 +90,13 @@ api.interceptors.response.use(
       return Promise.reject({ ...error, message: getErrorMessage(error) });
     }
 
-    if (status === 401 && !original._retry) {
+    if (status === 401 && !original._retry && !isAuthRoute(original.url)) {
       original._retry = true;
+
       try {
         await ensureRefreshed();
         return api(original);
       } catch {
-        // refresh failed -> user should login again
         return Promise.reject({ ...error, message: "Unauthorized" });
       }
     }

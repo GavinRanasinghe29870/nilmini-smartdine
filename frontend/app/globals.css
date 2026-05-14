@@ -90,3 +90,72 @@ body {
     4px 4px 0 rgba(0, 0, 0, 0.85);
 }
 }
+
+/* Ingredient List Print / Save as PDF */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .ingredient-print-area,
+  .ingredient-print-area * {
+    visibility: visible;
+  }
+
+  .ingredient-no-print {
+    display: none !important;
+  }
+
+  .ingredient-print-area {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: var(--text-white) !important;
+    color: var(--text-black) !important;
+    box-shadow: none !important;
+  }
+
+  .ingredient-print-content {
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 1rem 0 0 0 !important;
+  }
+
+  .ingredient-datatable-print table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .ingredient-datatable-print th {
+    background: var(--bg-1) !important;
+    color: var(--text-white) !important;
+    border: 1px solid var(--bg-1) !important;
+  }
+
+  .ingredient-datatable-print td {
+    color: var(--text-black) !important;
+    border: 1px solid var(--bg-2) !important;
+  }
+
+  .ingredient-print-text-strong {
+    color: var(--text-black) !important;
+  }
+
+  .ingredient-print-primary {
+    color: var(--button) !important;
+  }
+
+  .ingredient-print-muted {
+    color: var(--bg-2) !important;
+  }
+
+  .ingredient-signature-print {
+    color: var(--bg-2) !important;
+    border-color: var(--text-black) !important;
+  }
+}

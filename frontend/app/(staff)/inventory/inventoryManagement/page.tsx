@@ -1,53 +1,72 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, X, ArrowLeft } from "lucide-react";
 import DataTable, { Column } from "../../../src/components/DataTable";
-import Image from "next/image";
 import AddItemModal from "../AddItemModal";
 import EditItemModal from "../EditItemModal";
 import { useRouter } from "next/navigation";
 
+import type { InventoryItem } from "../../../src/types/inventory";
+import {
+  addInventoryQuantity,
+  createInventoryItem,
+  deleteInventoryItem,
+  getAllInventory,
+  getInventoryImageSrc,
+  updateInventoryItem,
+} from "../../../src/lib/api/inventory.api";
 
-type InventoryItem = {
-  id: number;
-  name: string;
-  itemId: string;
-  quantity: number;
-  cost: number;
-  availability: "In Stock" | "Out of Stock";
-  image: string;
-};
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return fallback;
+}
 
 export default function InventoryPage() {
   const router = useRouter();
-  const [inventory, setInventory] = useState<InventoryItem[]>(
-    Array.from({ length: 6 }).map((_, i) => ({
-      id: i + 1,
-      name: "Flour",
-      itemId: "#22314644",
-      quantity: 200,
-      cost: 55,
-      availability: "In Stock",
-      image: "/images/flour.png",
-    }))
-  );
 
-  /* 🔹 Quantity modal */
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [newQuantity, setNewQuantity] = useState("");
-  const [unit, setUnit] = useState("Kg");
+
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
 
-  /* 🔹 Add Item modal */
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
 
-  const openModal = (item: InventoryItem) => {
+  const loadInventory = async () => {
+    try {
+      setLoading(true);
+      setErrorMessage("");
+
+      const items = await getAllInventory();
+      setInventory(items);
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Failed to load inventory"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadInventory();
+  }, []);
+
+  const openQuantityModal = (item: InventoryItem) => {
     setSelectedItem(item);
     setNewQuantity("");
-    setUnit("Kg");
     setIsModalOpen(true);
   };
 
@@ -56,43 +75,69 @@ export default function InventoryPage() {
     setIsEditOpen(true);
   };
 
+  const saveQuantity = async () => {
+    if (!selectedItem || !newQuantity || Number(newQuantity) <= 0) return;
 
-  const saveQuantity = () => {
-    if (!selectedItem || !newQuantity) return;
-
-    setInventory((prev) =>
-      prev.map((item) =>
-        item.id === selectedItem.id
-          ? { ...item, quantity: item.quantity + Number(newQuantity) }
-          : item
-      )
-    );
-
-    setIsModalOpen(false);
+    try {
+      await addInventoryQuantity(selectedItem.id, Number(newQuantity));
+      setIsModalOpen(false);
+      setSelectedItem(null);
+      setNewQuantity("");
+      await loadInventory();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Failed to update quantity"));
+    }
   };
 
-  const saveEditedItem = (updatedItem: InventoryItem) => {
-    setInventory((prev) =>
-      prev.map((item) =>
-        item.id === updatedItem.id ? updatedItem : item
-      )
-    );
+  const saveNewItem = async (formData: FormData) => {
+    await createInventoryItem(formData);
+    await loadInventory();
   };
 
+  const saveEditedItem = async (id: string, formData: FormData) => {
+    await updateInventoryItem(id, formData);
+    await loadInventory();
+  };
+
+  const handleDelete = async (item: InventoryItem) => {
+    const confirmed = window.confirm(`Delete ${item.name}?`);
+    if (!confirmed) return;
+
+    try {
+      await deleteInventoryItem(item.id);
+      await loadInventory();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Failed to delete item"));
+    }
+  };
 
   const inventoryColumns: Column<InventoryItem>[] = [
     {
       key: "image",
       label: "Item",
-      render: (item) => (
-        <Image
-          src={item.image}
-          alt={item.name}
-          width={40}
-          height={40}
-          className="rounded-lg"
-        />
-      ),
+      render: (item) => {
+        const imageSrc = getInventoryImageSrc(
+          item.image,
+          "/images/placeholder.png"
+        );
+
+        return (
+          <div className="w-10 h-10 rounded-lg overflow-hidden bg-bg-1 flex items-center justify-center">
+            {imageSrc ? (
+              <img
+                src={imageSrc}
+                alt={item.name}
+                className="h-16 w-16 rounded-lg object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = "/images/placeholder.png";
+                }}
+              />
+            ) : (
+              <span className="text-xs text-gray-500">No Img</span>
+            )}
+          </div>
+        );
+      },
     },
     { key: "name", label: "Item Name" },
     { key: "itemId", label: "Item ID" },
@@ -101,9 +146,12 @@ export default function InventoryPage() {
       label: "Available Quantity",
       render: (item) => (
         <div className="flex items-center gap-2">
-          {item.quantity}Kg
+          <span>
+            {item.quantity} {item.unit}
+          </span>
+
           <button
-            onClick={() => openModal(item)}
+            onClick={() => openQuantityModal(item)}
             className="p-1 bg-bg-1 rounded-full text-primary hover:bg-bg-2"
           >
             <Plus size={14} />
@@ -114,7 +162,7 @@ export default function InventoryPage() {
     {
       key: "cost",
       label: "Cost",
-      render: (item) => `$${item.cost.toFixed(2)}`,
+      render: (item) => `LKR ${Number(item.cost || 0).toFixed(2)}`,
     },
     { key: "availability", label: "Availability" },
     {
@@ -129,17 +177,20 @@ export default function InventoryPage() {
           >
             <Pencil size={16} />
           </button>
-          <button className="text-red-500">
+
+          <button
+            onClick={() => handleDelete(item)}
+            className="text-red-500 hover:text-red-400"
+          >
             <Trash2 size={16} />
           </button>
         </div>
       ),
-    }
+    },
   ];
 
   return (
     <main className="flex-1 p-8 relative">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
           onClick={() => router.back()}
@@ -147,10 +198,10 @@ export default function InventoryPage() {
         >
           <ArrowLeft size={18} />
         </button>
+
         <h1 className="text-h4 font-semibold">Inventory</h1>
       </div>
 
-      {/* Top Bar */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-h5 font-medium">
           Inventory Items{" "}
@@ -166,12 +217,20 @@ export default function InventoryPage() {
         </button>
       </div>
 
-      {/* Table */}
-      <DataTable columns={inventoryColumns} data={inventory} />
+      {errorMessage ? (
+        <div className="mb-4 rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          {errorMessage}
+        </div>
+      ) : null}
 
-      {/* Quantity Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-bg-1 flex items-center justify-center z-50">
+      {loading ? (
+        <div className="text-gray-400">Loading inventory...</div>
+      ) : (
+        <DataTable columns={inventoryColumns} data={inventory} />
+      )}
+
+      {isModalOpen && selectedItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-bg-2 rounded-xl w-[420px] p-6 relative">
             <button
               onClick={() => setIsModalOpen(false)}
@@ -180,27 +239,20 @@ export default function InventoryPage() {
               <X size={18} />
             </button>
 
-            <h2 className="text-lg font-semibold mb-4">Quantity</h2>
+            <h2 className="text-lg font-semibold mb-4">Add Quantity</h2>
+
+            <div className="mb-3 text-sm text-gray-400">
+              {selectedItem.name} ({selectedItem.unit})
+            </div>
 
             <input
               type="number"
+              min="1"
               placeholder="Enter quantity"
               value={newQuantity}
               onChange={(e) => setNewQuantity(e.target.value)}
-              className="w-full bg-bg-2 rounded-lg px-4 py-2 mb-4 outline-none"
+              className="w-full bg-bg-1 rounded-lg px-4 py-2 mb-6 outline-none text-text-white"
             />
-
-            <h3 className="text-sm mb-2">Unit type</h3>
-            <select
-              value={unit}
-              onChange={(e) => setUnit(e.target.value)}
-              className="w-full bg-bg-2 rounded-lg px-4 py-2 mb-6"
-            >
-              <option>Kg</option>
-              <option>g</option>
-              <option>L</option>
-              <option>pcs</option>
-            </select>
 
             <div className="flex justify-end gap-4">
               <button
@@ -209,6 +261,7 @@ export default function InventoryPage() {
               >
                 Cancel
               </button>
+
               <button
                 onClick={saveQuantity}
                 className="bg-primary text-text-black px-6 py-2 rounded-lg"
@@ -220,18 +273,18 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* ITEM MODAL */}
       <AddItemModal
         open={isAddItemOpen}
         onClose={() => setIsAddItemOpen(false)}
+        onSave={saveNewItem}
       />
+
       <EditItemModal
         open={isEditOpen}
         item={editItem}
         onClose={() => setIsEditOpen(false)}
         onSave={saveEditedItem}
       />
-
     </main>
   );
 }

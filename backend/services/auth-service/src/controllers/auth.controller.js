@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const bcrypt = require("bcryptjs"); 
+const bcrypt = require("bcryptjs");
 const { redis } = require("../config/redis");
 const User = require("../models/user.model");
 const { signAccessToken, signRefreshToken } = require("../utils/tokens");
@@ -26,24 +26,31 @@ exports.login = async (req, res) => {
       $or: [{ email: query.toLowerCase() }, { username: query }],
     });
 
-    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
     const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(401).json({ message: "Invalid credentials" });
+    if (!ok) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
     const sid = crypto.randomUUID();
-
-    if (!redis) {
-      return res.status(500).json({ message: "Redis not initialized" });
-    }
 
     await redis.set(`session:${sid}`, String(user._id), "EX", 60 * 60 * 24 * 7);
 
     const accessToken = signAccessToken(user, sid);
     const refreshToken = signRefreshToken(user, sid);
 
-    res.cookie("accessToken", accessToken, { ...cookieOptions, maxAge: 15 * 60 * 1000 });
-    res.cookie("refreshToken", refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.cookie("accessToken", accessToken, {
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      ...cookieOptions,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
     return res.json({
       user: {
@@ -61,49 +68,50 @@ exports.login = async (req, res) => {
 };
 
 exports.verify = async (req, res) => {
-  try {
-    const token = req.cookies?.accessToken;
-    if (!token) return res.status(401).json({ message: "Missing access token" });
-
-    const payload = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-
-    if (payload.type !== "access") return res.status(401).json({ message: "Invalid token type" });
-
-    if (payload.sid) {
-      const exists = await redis.get(`session:${payload.sid}`);
-      if (!exists) return res.status(401).json({ message: "Session revoked" });
-    }
-
-    return res.json({
-      user: {
-        id: payload.sub,
-        role: payload.role,
-        email: payload.email,
-        username: payload.username,
-        fullName: payload.fullName,
-      },
-    });
-  } catch (e) {
-    return res.status(401).json({ message: "Invalid or expired token" });
-  }
+  return res.json({
+    user: {
+      id: req.user.sub,
+      role: req.user.role,
+      email: req.user.email,
+      username: req.user.username,
+      fullName: req.user.fullName,
+    },
+  });
 };
 
 exports.refresh = async (req, res) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
-    if (!refreshToken) return res.status(401).json({ message: "Missing refresh token" });
+    if (!refreshToken) {
+      return res.status(401).json({ message: "Missing refresh token" });
+    }
 
     const payload = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
 
-    const userId = await redis.get(`session:${payload.sid}`);
-    if (!userId) return res.status(401).json({ message: "Session revoked" });
+    if (payload.type !== "refresh" || !payload.sid) {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
 
-    const user = await User.findById(userId);
-    if (!user) return res.status(401).json({ message: "User not found" });
+    const sessionUserId = await redis.get(`session:${payload.sid}`);
+    if (!sessionUserId || String(sessionUserId) !== String(payload.sub)) {
+      return res.status(401).json({ message: "Session revoked" });
+    }
+
+    const user = await User.findById(sessionUserId);
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    if ((user.tokenVersion ?? 0) !== (payload.tokenVersion ?? 0)) {
+      return res.status(401).json({ message: "Session revoked" });
+    }
 
     const newAccess = signAccessToken(user, payload.sid);
 
-    res.cookie("accessToken", newAccess, { ...cookieOptions, maxAge: 15 * 60 * 1000 });
+    res.cookie("accessToken", newAccess, {
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000,
+    });
 
     return res.json({ message: "refreshed" });
   } catch (e) {
@@ -118,7 +126,9 @@ exports.logout = async (req, res) => {
     if (refreshToken) {
       try {
         const payload = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-        if (payload.sid) await redis.del(`session:${payload.sid}`);
+        if (payload.sid) {
+          await redis.del(`session:${payload.sid}`);
+        }
       } catch (_) {}
     }
 
