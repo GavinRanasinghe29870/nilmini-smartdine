@@ -5,6 +5,7 @@ const morgan = require("morgan");
 
 const revenueRoutes = require("./routes/revenue.routes");
 const salesRoutes = require("./routes/sales.routes");
+const dashboardRoutes = require("./routes/dashboard.routes");
 
 const app = express();
 
@@ -38,12 +39,14 @@ app.get("/health", (req, res) => {
     routes: {
       revenue: "/api/reports/revenue",
       sales: "/api/reports/sales",
+      dashboard: "/api/reports/dashboard",
     },
   });
 });
 
 app.use("/api/reports/revenue", revenueRoutes);
 app.use("/api/reports/sales", salesRoutes);
+app.use("/api/reports/dashboard", dashboardRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

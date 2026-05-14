@@ -8,7 +8,7 @@ services:
     networks:
       - nilmini-network
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -55,7 +55,7 @@ services:
         condition: service_started
     networks:
       - nilmini-network
-  
+
   customer-preference-api:
     build:
       context: ./backend/services/nilmini_customer_preference_api
@@ -249,6 +249,7 @@ services:
       PRODUCT_SERVICE_URL: http://product-service:5004
       INVENTORY_SERVICE_URL: http://inventory-service:5003
       STAFF_SERVICE_URL: http://staff-service:5002
+      AI_MENU_SERVICE_URL: http://ai-menu-service:5005
       FRONTEND_ORIGIN: http://localhost:3000
       CLIENT_ORIGIN: http://localhost:3000
     ports:
@@ -261,6 +262,8 @@ services:
       inventory-service:
         condition: service_started
       staff-service:
+        condition: service_started
+      ai-menu-service:
         condition: service_started
     networks:
       - nilmini-network
