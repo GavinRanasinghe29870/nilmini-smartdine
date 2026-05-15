@@ -1,6 +1,7 @@
-const fetch = require("node-fetch");
-
-const AUTH_BASE = (process.env.AUTH_SERVICE_URL || "http://localhost:5001").replace(/\/$/, "");
+const AUTH_BASE = (process.env.AUTH_SERVICE_URL || "http://localhost:5001").replace(
+  /\/$/,
+  ""
+);
 
 async function callAuth(path, { method = "GET", cookie, body } = {}) {
   const res = await fetch(`${AUTH_BASE}${path}`, {
@@ -15,6 +16,7 @@ async function callAuth(path, { method = "GET", cookie, body } = {}) {
   const text = await res.text();
 
   let data = null;
+
   try {
     data = text ? JSON.parse(text) : null;
   } catch {

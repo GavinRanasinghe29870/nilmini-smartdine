@@ -6,6 +6,7 @@ const passport = require("passport");
 const { configurePassport } = require("./config/passport");
 
 const authRoutes = require("./routes/auth.routes");
+const staffRoutes = require("./routes/staff.routes");
 
 const app = express();
 
@@ -32,5 +33,6 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/staff", staffRoutes);
 
 module.exports = app;
