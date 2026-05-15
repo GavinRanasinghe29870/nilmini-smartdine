@@ -9,6 +9,7 @@ function signAccessToken(user, sid) {
       email: user.email,
       username: user.username,
       fullName: user.fullName,
+      tokenVersion: user.tokenVersion ?? 0,
     },
     process.env.ACCESS_TOKEN_SECRET,
     {
@@ -20,7 +21,11 @@ function signAccessToken(user, sid) {
 
 function signRefreshToken(user, sid) {
   return jwt.sign(
-    { sid },
+    {
+      type: "refresh",
+      sid,
+      tokenVersion: user.tokenVersion ?? 0,
+    },
     process.env.REFRESH_TOKEN_SECRET,
     {
       subject: String(user._id),

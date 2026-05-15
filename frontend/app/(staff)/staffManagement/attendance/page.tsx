@@ -1,83 +1,180 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowLeft, ChevronDown, Pencil, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, ChevronDown, Plus, RefreshCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
+
 import DataTable, { Column } from "../../../src/components/DataTable";
 import AddStaffModal from "../AddStaffModal";
 
-type AttendanceStatus = "Present" | "Absent" | "Half Shift" | "Leave";
+import type {
+  AttendanceStatus,
+  StaffAttendance,
+} from "../../../src/types/staff";
+import {
+  getAttendanceByDate,
+  updateStaffAttendance,
+} from "../../../src/lib/api/staff.api";
 
-type Attendance = {
-  id: number;
-  name: string;
+type AttendanceRow = {
+  staffId: string;
+  fullName: string;
   role: string;
   date: string;
-  time: string;
-  status?: AttendanceStatus;
+  shiftStart: string;
+  shiftEnd: string;
+  status: AttendanceStatus | "";
 };
+
+const STATUS_OPTIONS: AttendanceStatus[] = [
+  "Present",
+  "Absent",
+  "Half Shift",
+  "Leave",
+];
+
+function todayDateString() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function statusClass(status: AttendanceStatus | "") {
+  if (status === "Present") return "bg-primary text-black";
+  if (status === "Absent") return "bg-yellow-400 text-black";
+  if (status === "Half Shift") return "bg-cyan-400 text-black";
+  if (status === "Leave") return "bg-red-500 text-black";
+  return "bg-bg-2 text-gray-300";
+}
 
 export default function AttendancePage() {
   const router = useRouter();
+
   const [openAddStaff, setOpenAddStaff] = useState(false);
+  const [date, setDate] = useState(todayDateString());
+  const [attendanceList, setAttendanceList] = useState<AttendanceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState("");
+  const [error, setError] = useState("");
 
-  const attendanceList: Attendance[] = Array.from({ length: 22 }).map(
-    (_, i) => ({
-      id: 101 + i,
-      name: "Watson Joyce",
-      role: "Manager",
-      date: "16 Apr 2024",
-      time: "9am to 6pm",
-      status:
-        i % 4 === 0
-          ? "Present"
-          : i % 4 === 1
-            ? "Absent"
-            : i % 4 === 2
-              ? "Half Shift"
-              : "Leave",
-    })
-  );
+  function toRow(item: StaffAttendance): AttendanceRow {
+    return {
+      staffId: item.staffId,
+      fullName: item.fullName || "",
+      role: item.role || "STAFF",
+      date: item.date,
+      shiftStart: item.shiftStart || "",
+      shiftEnd: item.shiftEnd || "",
+      status: item.status || "",
+    };
+  }
 
-  const columns: Column<Attendance>[] = [
-    { key: "id", label: "ID", render: (r) => `#${r.id}` },
+  async function loadAttendance(selectedDate = date) {
+    try {
+      setLoading(true);
+      setError("");
+
+      const list = await getAttendanceByDate(selectedDate);
+      setAttendanceList(list.map(toRow));
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error ? e.message : "Failed to load attendance";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleStatusChange(
+    row: AttendanceRow,
+    status: AttendanceStatus
+  ) {
+    try {
+      setSavingId(row.staffId);
+      setError("");
+
+      const updated = await updateStaffAttendance({
+        staffId: row.staffId,
+        date,
+        status,
+        shiftStart: row.shiftStart,
+        shiftEnd: row.shiftEnd,
+      });
+
+      setAttendanceList((prev) =>
+        prev.map((item) =>
+          item.staffId === row.staffId ? toRow(updated) : item
+        )
+      );
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error ? e.message : "Failed to update attendance";
+      setError(message);
+    } finally {
+      setSavingId("");
+    }
+  }
+
+  useEffect(() => {
+    loadAttendance(date);
+  }, [date]);
+
+  const columns: Column<AttendanceRow>[] = [
     {
-      key: "name",
+      key: "staffId",
+      label: "ID",
+      render: (r) => `#${r.staffId.slice(-6)}`,
+    },
+    {
+      key: "fullName",
       label: "Name",
       render: (r) => (
         <div>
-          <p className="font-medium">{r.name}</p>
+          <p className="font-medium text-white">{r.fullName}</p>
           <p className="text-xs text-primary">{r.role}</p>
         </div>
       ),
     },
     { key: "date", label: "Date" },
-    { key: "time", label: "Timings" },
+    {
+      key: "time",
+      label: "Timings",
+      render: (r) => {
+        if (!r.shiftStart && !r.shiftEnd) return "-";
+        return `${r.shiftStart || ""} to ${r.shiftEnd || ""}`;
+      },
+    },
     {
       key: "status",
       label: "Status",
       render: (r) => (
-        <button
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
-            ${r.status === "Present"
-              ? "bg-primary text-black"
-              : r.status === "Absent"
-                ? "bg-yellow-400 text-black"
-                : r.status === "Half Shift"
-                  ? "bg-cyan-400 text-black"
-                  : "bg-red-500 text-black"
-            }`}
+        <select
+          value={r.status}
+          disabled={savingId === r.staffId}
+          onChange={(e) => {
+            const value = e.target.value as AttendanceStatus | "";
+            if (!value) return;
+            handleStatusChange(r, value);
+          }}
+          className={`px-4 py-2 rounded-lg text-xs font-medium outline-none cursor-pointer disabled:opacity-60 ${statusClass(
+            r.status
+          )}`}
         >
-          {r.status}
-          <Pencil size={12} />
-        </button>
+          <option value="">Not Marked</option>
+          {STATUS_OPTIONS.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
       ),
     },
   ];
 
   return (
     <main className="flex-1 p-8">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
           onClick={() => router.back()}
@@ -88,13 +185,28 @@ export default function AttendancePage() {
         <h1 className="text-h4 font-semibold">Staff Management</h1>
       </div>
 
-      {/* Top Bar */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-h5 font-medium">
-          Staff <span className="text-gray-400">(22)</span>
+          Attendance{" "}
+          <span className="text-gray-400">({attendanceList.length})</span>
         </h2>
 
         <div className="flex gap-3">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="px-4 py-2 rounded-lg bg-bg-2 text-white text-sm outline-none"
+          />
+
+          <button
+            onClick={() => loadAttendance(date)}
+            className="flex items-center gap-2 px-4 py-2 bg-bg-2 rounded-lg text-sm hover:bg-bg-1"
+          >
+            <RefreshCcw size={16} />
+            Refresh
+          </button>
+
           <button
             onClick={() => setOpenAddStaff(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-lg"
@@ -109,7 +221,6 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-4 mb-6">
         <button
           onClick={() => router.push("/staffManagement")}
@@ -123,13 +234,20 @@ export default function AttendancePage() {
         </button>
       </div>
 
-      <DataTable columns={columns} data={attendanceList} />
+      {error && <p className="text-red-400 mb-4">{error}</p>}
+
+      {loading ? (
+        <p className="text-gray-400">Loading attendance...</p>
+      ) : (
+        <DataTable columns={columns} data={attendanceList} />
+      )}
 
       <AddStaffModal
         open={openAddStaff}
         onClose={() => setOpenAddStaff(false)}
         onCreated={() => {
           setOpenAddStaff(false);
+          loadAttendance(date);
         }}
       />
     </main>

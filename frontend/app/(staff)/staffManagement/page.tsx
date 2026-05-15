@@ -1,16 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, ChevronDown, ArrowLeft, Eye, Pencil, Trash2 } from "lucide-react";
+import {
+  Plus,
+  ChevronDown,
+  ArrowLeft,
+  Eye,
+  Pencil,
+  Trash2,
+  Banknote,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import DataTable, { Column } from "../../src/components/DataTable";
 import AddStaffModal from "./AddStaffModal";
 import EditStaffModal from "./EditStaffModal";
+import PaySalaryModal from "./PaySalaryModal";
 
-import type { Staff } from "../../../app/src/types/staff";
-import { getAllStaff } from "../../../app/src/lib/api/staff.api";
-import { verify } from "../../../app/src/lib/auth";
+import type { Staff } from "../../src/types/staff";
+import { getAllStaff } from "../../src/lib/api/staff.api";
+import { verify } from "../../src/lib/auth";
+
+const STAFF_PANEL_ROLES = ["OWNER", "MANAGER"];
 
 type UIStaff = {
   id: string;
@@ -27,23 +38,28 @@ type UIStaff = {
   image?: string;
 };
 
+function formatLkr(value: number) {
+  return `LKR ${Number(value || 0).toLocaleString("en-LK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export default function StaffManagementPage() {
   const router = useRouter();
 
   const [openAddStaff, setOpenAddStaff] = useState(false);
   const [editingStaff, setEditingStaff] = useState<UIStaff | null>(null);
+  const [payingStaff, setPayingStaff] = useState<UIStaff | null>(null);
 
   const [staffList, setStaffList] = useState<UIStaff[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [allowed, setAllowed] = useState(false);
+  const [success, setSuccess] = useState("");
 
   function toUIStaff(u: Staff): UIStaff {
-    const id =
-      u._id ||
-      (typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random()}`);
+    const id = u._id || u.id || "";
 
     return {
       id,
@@ -83,8 +99,8 @@ export default function StaffManagementPage() {
 
         const data = await verify();
 
-        if (data?.user?.role !== "OWNER") {
-          router.replace("/dashboard");
+        if (!STAFF_PANEL_ROLES.includes(data?.user?.role)) {
+          router.replace("/login");
           return;
         }
 
@@ -117,16 +133,19 @@ export default function StaffManagementPage() {
       label: "Age",
       render: (r) => {
         if (!r.dob) return "-";
+
         const age = Math.floor(
-          (Date.now() - new Date(r.dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+          (Date.now() - new Date(r.dob).getTime()) /
+            (365.25 * 24 * 60 * 60 * 1000)
         );
+
         return `${age} yr`;
       },
     },
     {
       key: "salary",
       label: "Salary",
-      render: (r) => `$${Number(r.salary || 0).toFixed(2)}`,
+      render: (r) => formatLkr(r.salary),
     },
     {
       key: "time",
@@ -144,7 +163,8 @@ export default function StaffManagementPage() {
         <div className="flex justify-end gap-3">
           <button
             onClick={() => router.push(`/staffManagement/${row.id}`)}
-            className="text-primary"
+            className="text-primary hover:opacity-80"
+            title="View staff"
           >
             <Eye size={16} />
           </button>
@@ -152,11 +172,20 @@ export default function StaffManagementPage() {
           <button
             onClick={() => setEditingStaff(row)}
             className="text-gray-400 hover:text-white"
+            title="Edit staff"
           >
             <Pencil size={16} />
           </button>
 
-          <button className="text-red-500">
+          <button
+            onClick={() => setPayingStaff(row)}
+            className="text-green-400 hover:text-green-300"
+            title="Pay salary"
+          >
+            <Banknote size={16} />
+          </button>
+
+          <button className="text-red-500 hover:text-red-400" title="Delete">
             <Trash2 size={16} />
           </button>
         </div>
@@ -220,6 +249,8 @@ export default function StaffManagementPage() {
       </div>
 
       {error && <p className="text-red-400 mb-4">{error}</p>}
+      {success && <p className="text-green-400 mb-4">{success}</p>}
+
       {loading ? (
         <p className="text-gray-400">Loading...</p>
       ) : (
@@ -239,6 +270,16 @@ export default function StaffManagementPage() {
         open={!!editingStaff}
         staff={editingStaff}
         onClose={() => setEditingStaff(null)}
+      />
+
+      <PaySalaryModal
+        open={!!payingStaff}
+        staff={payingStaff}
+        onClose={() => setPayingStaff(null)}
+        onPaid={() => {
+          setSuccess("Salary payment recorded successfully");
+          setPayingStaff(null);
+        }}
       />
     </main>
   );

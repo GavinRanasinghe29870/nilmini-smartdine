@@ -1,6 +1,7 @@
-const fetch = require("node-fetch");
-
-const AUTH_BASE = (process.env.AUTH_SERVICE_URL || "http://localhost:5001").replace(/\/$/, "");
+const AUTH_BASE = (process.env.AUTH_SERVICE_URL || "http://localhost:5001").replace(
+  /\/$/,
+  ""
+);
 
 async function callAuth(path, { method = "GET", cookie } = {}) {
   const res = await fetch(`${AUTH_BASE}${path}`, {
@@ -29,12 +30,14 @@ async function requireAuth(req, res, next) {
     });
 
     if (!verifyRes.ok) {
-      return res.status(401).json({ message: data?.message || "Unauthorized" });
+      return res.status(401).json({
+        message: data?.message || "Unauthorized",
+      });
     }
 
     req.user = data.user;
     next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ message: "Unauthorized" });
   }
 }
