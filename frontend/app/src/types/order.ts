@@ -9,6 +9,8 @@ export type OrderStatus =
 
 export type PaymentStatus = "Pending" | "Paid" | "Cancelled";
 
+export type PaymentMethod = "Cashier" | "Online" | "Not Selected";
+
 export type OrderItemDto = {
   productId: string;
   productName: string;
@@ -30,7 +32,11 @@ export type OrderDto = {
   totalCost: number;
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatus;
-  paymentMethod: string;
+  paymentMethod: PaymentMethod | string;
+  discountAmount?: number;
+  paidAmount?: number;
+  balanceAmount?: number;
+  paidAt?: string | null;
   note?: string;
   placedAt: string;
   createdAt: string;
@@ -42,7 +48,7 @@ export type CreateOrderPayload = {
   groupSize: number;
   weather: string;
   dayType: DayType;
-  paymentMethod?: string;
+  paymentMethod?: PaymentMethod | string;
   note?: string;
   items: {
     productId: string;
@@ -57,4 +63,21 @@ export type CreateOrderPayload = {
 export type UpdateOrderStatusPayload = {
   orderStatus?: OrderStatus;
   paymentStatus?: PaymentStatus;
+};
+
+export type ConfirmOrderPaymentPayload = {
+  paidAmount: number;
+  discountAmount: number;
+  paymentMethod?: PaymentMethod | string;
+  note?: string;
+};
+
+export type GetOrdersQuery = {
+  status?: OrderStatus;
+  paymentStatus?: PaymentStatus;
+  dayType?: DayType;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
 };

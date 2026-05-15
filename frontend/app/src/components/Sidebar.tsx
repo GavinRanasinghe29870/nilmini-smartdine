@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
@@ -12,8 +13,15 @@ export default function Sidebar() {
   return (
     <aside className="w-64 min-h-screen bg-[#111315] text-white flex flex-col">
       {/* Logo */}
-      <div className="px-6 py-6 text-2xl font-semibold text-purple-400">
-        Logo
+      <div className="px-6 py-6 flex items-center justify-center">
+        <Image
+          src="/logo_without_text.png"
+          alt="Nilmini SmartDine Logo"
+          width={90}
+          height={90}
+          priority
+          className="object-contain"
+        />
       </div>
 
       {/* Menu */}

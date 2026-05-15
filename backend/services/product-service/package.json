@@ -5,6 +5,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "seed:categories": "node src/seed/seedNilminiProductCategories.js",
+    "seed:products": "node src/seed/seedNilminiProducts.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

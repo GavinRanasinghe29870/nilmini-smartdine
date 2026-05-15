@@ -109,6 +109,28 @@ const orderSchema = new mongoose.Schema(
       default: "Cashier",
     },
 
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    paidAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    balanceAmount: {
+      type: Number,
+      default: 0,
+    },
+
+    paidAt: {
+      type: Date,
+      default: null,
+    },
+
     note: {
       type: String,
       default: "",

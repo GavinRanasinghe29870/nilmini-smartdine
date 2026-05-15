@@ -1,20 +1,12 @@
 import axios, { AxiosError } from "axios";
-import {
+import { api } from "../axios";
+import type {
+  ConfirmOrderPaymentPayload,
   CreateOrderPayload,
+  GetOrdersQuery,
   OrderDto,
   UpdateOrderStatusPayload,
 } from "../../types/order";
-
-const API_BASE_URL = "http://localhost:5000/api";
-
-const orderApi = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-  withCredentials: true,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
 
 type ApiResponse<T> = {
   success: boolean;
@@ -49,34 +41,51 @@ function getApiErrorMessage(error: unknown) {
   return "Something went wrong";
 }
 
+function cleanParams(query?: GetOrdersQuery) {
+  if (!query) return undefined;
+
+  const params: Record<string, string | number> = {};
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      params[key] = value as string | number;
+    }
+  });
+
+  return params;
+}
+
 export async function createOrder(payload: CreateOrderPayload) {
   try {
-    const response = await orderApi.post<ApiResponse<OrderDto>>(
-      "/orders",
-      payload
-    );
-
+    const response = await api.post<ApiResponse<OrderDto>>("/orders", payload);
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error));
   }
 }
 
-export async function getOrders() {
+export async function getOrders(query?: GetOrdersQuery) {
   try {
-    const response = await orderApi.get<ApiResponse<OrderDto[]>>("/orders");
-    return response.data.data;
+    const response = await api.get<ApiResponse<OrderDto[]>>("/orders", {
+      params: cleanParams(query),
+    });
+
+    return response.data.data || [];
   } catch (error) {
     throw new Error(getApiErrorMessage(error));
   }
+}
+
+export async function getPendingPaymentOrders() {
+  return getOrders({
+    paymentStatus: "Pending",
+    limit: 25,
+  });
 }
 
 export async function getOrderById(id: string) {
   try {
-    const response = await orderApi.get<ApiResponse<OrderDto>>(
-      `/orders/${id}`
-    );
-
+    const response = await api.get<ApiResponse<OrderDto>>(`/orders/${id}`);
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error));
@@ -88,8 +97,24 @@ export async function updateOrderStatus(
   payload: UpdateOrderStatusPayload
 ) {
   try {
-    const response = await orderApi.patch<ApiResponse<OrderDto>>(
+    const response = await api.patch<ApiResponse<OrderDto>>(
       `/orders/${id}/status`,
+      payload
+    );
+
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error));
+  }
+}
+
+export async function confirmOrderPayment(
+  id: string,
+  payload: ConfirmOrderPaymentPayload
+) {
+  try {
+    const response = await api.patch<ApiResponse<OrderDto>>(
+      `/orders/${id}/payment`,
       payload
     );
 
@@ -101,10 +126,7 @@ export async function updateOrderStatus(
 
 export async function deleteOrder(id: string) {
   try {
-    const response = await orderApi.delete<ApiResponse<OrderDto>>(
-      `/orders/${id}`
-    );
-
+    const response = await api.delete<ApiResponse<OrderDto>>(`/orders/${id}`);
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error));

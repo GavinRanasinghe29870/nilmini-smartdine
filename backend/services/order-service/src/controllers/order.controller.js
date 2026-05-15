@@ -6,6 +6,14 @@ function createOrderNumber() {
   return `ORD-${timePart}${randomPart}`;
 }
 
+function normalizeMoney(value) {
+  const number = Number(value || 0);
+
+  if (!Number.isFinite(number)) return 0;
+
+  return Number(number.toFixed(2));
+}
+
 function normalizeOrderItems(items) {
   if (!Array.isArray(items) || items.length === 0) {
     const error = new Error("Order items are required");
@@ -107,6 +115,7 @@ exports.createOrder = async (req, res, next) => {
     } = req.body;
 
     const cleanItems = normalizeOrderItems(items);
+
     const totalCost = Number(
       cleanItems.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2)
     );
@@ -127,6 +136,14 @@ exports.createOrder = async (req, res, next) => {
       note: note || "",
       items: cleanItems,
       totalCost,
+
+      // Important: Billing page shows only Pending payments.
+      // This does not affect AI menu generation logic.
+      paymentStatus: "Pending",
+      discountAmount: 0,
+      paidAmount: 0,
+      balanceAmount: 0,
+      paidAt: null,
     });
 
     return res.status(201).json({
@@ -174,9 +191,11 @@ exports.getOrders = async (req, res, next) => {
       };
     }
 
+    const safeLimit = Math.min(Number(limit) || 100, 100000);
+
     const orders = await Order.find(filter)
-      .sort({ placedAt: -1 })
-      .limit(Number(limit));
+      .sort({ placedAt: -1, createdAt: -1 })
+      .limit(safeLimit);
 
     return res.status(200).json({
       success: true,
@@ -298,6 +317,10 @@ exports.updateOrder = async (req, res, next) => {
       paymentMethod,
       note,
       items,
+      discountAmount,
+      paidAmount,
+      balanceAmount,
+      paidAt,
     } = req.body;
 
     if (ageGroup !== undefined) order.ageGroup = ageGroup;
@@ -316,6 +339,22 @@ exports.updateOrder = async (req, res, next) => {
     if (paymentStatus !== undefined) order.paymentStatus = paymentStatus;
     if (paymentMethod !== undefined) order.paymentMethod = paymentMethod;
     if (note !== undefined) order.note = note;
+
+    if (discountAmount !== undefined) {
+      order.discountAmount = normalizeMoney(discountAmount);
+    }
+
+    if (paidAmount !== undefined) {
+      order.paidAmount = normalizeMoney(paidAmount);
+    }
+
+    if (balanceAmount !== undefined) {
+      order.balanceAmount = normalizeMoney(balanceAmount);
+    }
+
+    if (paidAt !== undefined) {
+      order.paidAt = paidAt ? new Date(paidAt) : null;
+    }
 
     if (items !== undefined) {
       const cleanItems = normalizeOrderItems(items);
@@ -342,15 +381,7 @@ exports.updateOrderStatus = async (req, res, next) => {
   try {
     const { orderStatus, paymentStatus } = req.body;
 
-    const updateData = {};
-
-    if (orderStatus !== undefined) updateData.orderStatus = orderStatus;
-    if (paymentStatus !== undefined) updateData.paymentStatus = paymentStatus;
-
-    const order = await Order.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-      runValidators: true,
-    });
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
       return res.status(404).json({
@@ -359,9 +390,103 @@ exports.updateOrderStatus = async (req, res, next) => {
       });
     }
 
+    if (orderStatus !== undefined) {
+      order.orderStatus = orderStatus;
+    }
+
+    if (paymentStatus !== undefined) {
+      order.paymentStatus = paymentStatus;
+
+      if (paymentStatus === "Paid") {
+        order.discountAmount = order.discountAmount || 0;
+        order.paidAmount = order.paidAmount || order.totalCost;
+        order.balanceAmount = order.balanceAmount || 0;
+        order.paidAt = order.paidAt || new Date();
+      }
+
+      if (paymentStatus === "Pending") {
+        order.discountAmount = 0;
+        order.paidAmount = 0;
+        order.balanceAmount = 0;
+        order.paidAt = null;
+      }
+    }
+
+    await order.save();
+
     return res.status(200).json({
       success: true,
       message: "Order status updated successfully",
+      data: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.confirmPayment = async (req, res, next) => {
+  try {
+    const { paidAmount, discountAmount, paymentMethod, note } = req.body;
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (order.paymentStatus === "Paid") {
+      return res.status(400).json({
+        success: false,
+        message: "Payment is already confirmed for this order",
+      });
+    }
+
+    if (order.paymentStatus === "Cancelled" || order.orderStatus === "Cancelled") {
+      return res.status(400).json({
+        success: false,
+        message: "Cancelled orders cannot be paid",
+      });
+    }
+
+    const cleanDiscount = normalizeMoney(discountAmount);
+    const cleanPaidAmount = normalizeMoney(paidAmount);
+    const payableAmount = normalizeMoney(Math.max(order.totalCost - cleanDiscount, 0));
+
+    if (cleanDiscount > order.totalCost) {
+      return res.status(400).json({
+        success: false,
+        message: "Discount cannot be greater than order total",
+      });
+    }
+
+    if (cleanPaidAmount < payableAmount) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment amount is less than grand total",
+      });
+    }
+
+    const balanceAmount = normalizeMoney(cleanPaidAmount - payableAmount);
+
+    order.discountAmount = cleanDiscount;
+    order.paidAmount = cleanPaidAmount;
+    order.balanceAmount = balanceAmount;
+    order.paymentStatus = "Paid";
+    order.paymentMethod = paymentMethod || "Cashier";
+    order.paidAt = new Date();
+
+    if (note !== undefined) {
+      order.note = note;
+    }
+
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment confirmed successfully",
       data: order,
     });
   } catch (error) {
