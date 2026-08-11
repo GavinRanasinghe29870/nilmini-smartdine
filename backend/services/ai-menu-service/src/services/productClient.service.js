@@ -1,3 +1,6 @@
+//small reusable client for fetching products from the product service
+
+
 const axios = require("axios");
 
 const PRODUCT_SERVICE_URL =

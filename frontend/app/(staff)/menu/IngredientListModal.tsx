@@ -2,22 +2,28 @@
 
 import { ClipboardList, Download, Printer, X } from "lucide-react";
 import DataTable, { Column } from "../../src/components/DataTable";
-import type { IngredientListItem } from "../../src/types/aiMenu";
+import type {
+  IngredientListItem,
+  InventoryRequirementItem,
+} from "../../src/types/aiMenu";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   menuDate?: string;
   ingredientList: IngredientListItem[];
+  inventoryRequirementList?: InventoryRequirementItem[];
 };
 
-type IngredientRow = {
+type InventoryRow = {
   id: string;
   no: number;
   ingredientName: string;
-  requiredQuantityNumber: number;
-  unit: string;
   requiredQuantity: string;
+  availableQuantity: string;
+  shortageQuantity: string;
+  shortageQuantityNumber: number;
+  status: string;
   relatedProductsText: string;
 };
 
@@ -25,24 +31,24 @@ function formatToday() {
   return new Date().toLocaleDateString("en-CA");
 }
 
-function formatNumber(value: number | string | undefined) {
-  const num = Number(value || 0);
-  const rounded = Math.round(num * 100) / 100;
+function getStatusClass(status: string) {
+  if (status === "Available") {
+    return "text-green-400";
+  }
 
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+  if (status === "Need Stock") {
+    return "text-yellow-300";
+  }
+
+  if (status === "Not In Inventory" || status === "Unit Mismatch") {
+    return "text-red-400";
+  }
+
+  return "text-gray-300";
 }
 
-export default function IngredientListModal({
-  open,
-  onClose,
-  menuDate,
-  ingredientList,
-}: Props) {
-  if (!open) return null;
-
-  const safeMenuDate = menuDate || "-";
-
-  const ingredientRows: IngredientRow[] = [...(ingredientList || [])]
+function buildFallbackRows(ingredientList: IngredientListItem[]): InventoryRow[] {
+  return [...(ingredientList || [])]
     .sort((a, b) =>
       String(a.ingredientName || "").localeCompare(
         String(b.ingredientName || "")
@@ -52,17 +58,56 @@ export default function IngredientListModal({
       id: `${item.ingredientName}-${item.unit}-${index}`,
       no: index + 1,
       ingredientName: item.ingredientName || "-",
-      requiredQuantityNumber: Number(item.requiredQuantityNumber || 0),
-      unit: item.unit || "-",
       requiredQuantity: item.requiredQuantity || "-",
+      availableQuantity: "-",
+      shortageQuantity: item.requiredQuantity || "-",
+      shortageQuantityNumber: Number(item.requiredQuantityNumber || 0),
+      status: "Inventory Not Checked",
       relatedProductsText: item.relatedProducts?.join(", ") || "-",
     }));
+}
+
+export default function IngredientListModal({
+  open,
+  onClose,
+  menuDate,
+  ingredientList,
+  inventoryRequirementList = [],
+}: Props) {
+  if (!open) return null;
+
+  const safeMenuDate = menuDate || "-";
+
+  const inventoryRows: InventoryRow[] =
+    inventoryRequirementList.length > 0
+      ? [...inventoryRequirementList]
+          .sort((a, b) =>
+            String(a.ingredientName || "").localeCompare(
+              String(b.ingredientName || "")
+            )
+          )
+          .map((item, index) => ({
+            id: `${item.ingredientName}-${item.unit}-${index}`,
+            no: index + 1,
+            ingredientName: item.ingredientName || "-",
+            requiredQuantity: item.requiredQuantity || "-",
+            availableQuantity: item.availableQuantity || "-",
+            shortageQuantity: item.shortageQuantity || "-",
+            shortageQuantityNumber: Number(item.shortageQuantityNumber || 0),
+            status: item.status || "-",
+            relatedProductsText: item.relatedProducts?.join(", ") || "-",
+          }))
+      : buildFallbackRows(ingredientList);
+
+  const totalNeedStockItems = inventoryRows.filter(
+    (item) => item.shortageQuantityNumber > 0
+  ).length;
 
   const handlePrintOrDownloadPdf = () => {
     window.print();
   };
 
-  const columns: Column<IngredientRow>[] = [
+  const columns: Column<InventoryRow>[] = [
     {
       key: "no",
       label: "No",
@@ -71,7 +116,7 @@ export default function IngredientListModal({
     },
     {
       key: "ingredientName",
-      label: "Ingredient",
+      label: "Inventory Item",
       render: (row) => (
         <span className="font-medium text-text-white ingredient-print-text-strong">
           {row.ingredientName}
@@ -79,24 +124,46 @@ export default function IngredientListModal({
       ),
     },
     {
-      key: "requiredQuantityNumber",
-      label: "Qty Number",
-      align: "right",
-      render: (row) => formatNumber(row.requiredQuantityNumber),
-    },
-    {
-      key: "unit",
-      label: "Unit",
-      align: "center",
-      render: (row) => row.unit,
-    },
-    {
       key: "requiredQuantity",
-      label: "Required Qty",
+      label: "Total Required",
       align: "right",
       render: (row) => (
-        <span className="font-semibold text-primary ingredient-print-primary">
+        <span className="font-semibold text-text-white">
           {row.requiredQuantity}
+        </span>
+      ),
+    },
+    {
+      key: "availableQuantity",
+      label: "Current Balance",
+      align: "right",
+      render: (row) => (
+        <span className="text-gray-300">{row.availableQuantity}</span>
+      ),
+    },
+    {
+      key: "shortageQuantity",
+      label: "Need to Add",
+      align: "right",
+      render: (row) => (
+        <span
+          className={
+            row.shortageQuantityNumber > 0
+              ? "font-bold text-primary"
+              : "text-green-400"
+          }
+        >
+          {row.shortageQuantity}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      align: "center",
+      render: (row) => (
+        <span className={`font-medium ${getStatusClass(row.status)}`}>
+          {row.status}
         </span>
       ),
     },
@@ -124,7 +191,7 @@ export default function IngredientListModal({
           <div className="flex items-center gap-2">
             <ClipboardList size={20} className="text-primary" />
             <h2 className="text-xl font-semibold text-text-white">
-              Ingredient List
+              Inventory Requirement List
             </h2>
           </div>
 
@@ -132,7 +199,7 @@ export default function IngredientListModal({
             <button
               type="button"
               onClick={handlePrintOrDownloadPdf}
-              disabled={ingredientRows.length === 0}
+              disabled={inventoryRows.length === 0}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-text-black rounded-lg font-medium hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download size={16} />
@@ -142,7 +209,7 @@ export default function IngredientListModal({
             <button
               type="button"
               onClick={handlePrintOrDownloadPdf}
-              disabled={ingredientRows.length === 0}
+              disabled={inventoryRows.length === 0}
               className="flex items-center gap-2 px-4 py-2 bg-bg-1 text-text-white rounded-lg hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Printer size={16} />
@@ -164,15 +231,18 @@ export default function IngredientListModal({
             <h1 className="text-h2 font-semibold text-primary ingredient-print-primary">
               NILMINI HOTEL
             </h1>
+
             <p className="text-lg font-medium text-text-white mt-2 ingredient-print-text-strong">
-              Ingredient List
+              Inventory Requirement List
             </p>
+
             <p className="text-sm text-gray-400 mt-2 ingredient-print-muted">
-              Generated using the final predicted menu quantities.
+              This list is calculated using final predicted menu quantities and
+              current inventory balance.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-3 mb-6 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-x-10 gap-y-3 mb-6 text-sm">
             <div>
               <p className="text-gray-400 ingredient-print-muted">Menu Date</p>
               <p className="text-text-white font-medium ingredient-print-text-strong">
@@ -191,25 +261,27 @@ export default function IngredientListModal({
 
             <div>
               <p className="text-gray-400 ingredient-print-muted">
-                Total Ingredients
+                Total Inventory Items
               </p>
               <p className="text-primary font-semibold ingredient-print-primary">
-                {ingredientRows.length}
+                {inventoryRows.length}
               </p>
             </div>
 
             <div>
-              <p className="text-gray-400 ingredient-print-muted">Purpose</p>
-              <p className="text-text-white font-medium ingredient-print-text-strong">
-                Production Preparation
+              <p className="text-gray-400 ingredient-print-muted">
+                Items Need Stock
+              </p>
+              <p className="text-primary font-semibold ingredient-print-primary">
+                {totalNeedStockItems}
               </p>
             </div>
           </div>
 
-          {ingredientRows.length === 0 ? (
+          {inventoryRows.length === 0 ? (
             <div className="rounded-lg bg-bg-1 border border-white/10 p-8 text-center">
               <p className="text-text-white font-medium">
-                No ingredients available
+                No inventory requirements available
               </p>
               <p className="text-sm text-gray-400 mt-2">
                 Products without ingredient details are ignored automatically.
@@ -217,14 +289,13 @@ export default function IngredientListModal({
             </div>
           ) : (
             <div className="ingredient-datatable-print">
-              <DataTable columns={columns} data={ingredientRows} />
+              <DataTable columns={columns} data={inventoryRows} />
             </div>
           )}
 
           <p className="text-xs text-gray-500 mt-4 ingredient-print-muted">
-            Note: Ingredient quantities are calculated by multiplying each
-            product&apos;s one-item ingredient usage by the final menu quantity.
-            Products without ingredient details are ignored.
+            Note: Need to Add = Total Required - Current Balance. If current
+            balance is enough, Need to Add becomes 0.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-10">

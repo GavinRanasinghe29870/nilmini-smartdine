@@ -14,6 +14,31 @@ export type IngredientListItem = {
   relatedProducts: string[];
 };
 
+export type InventoryRequirementItem = {
+  _id?: string;
+  ingredientName: string;
+  inventoryItemId?: string;
+  inventoryItemName?: string;
+
+  requiredQuantityNumber: number;
+  availableQuantityNumber: number;
+  shortageQuantityNumber: number;
+
+  unit: string;
+  requiredQuantity: string;
+  availableQuantity: string;
+  shortageQuantity: string;
+
+  status:
+    | "Available"
+    | "Need Stock"
+    | "Not In Inventory"
+    | "Unit Mismatch"
+    | string;
+
+  relatedProducts: string[];
+};
+
 export type AdjustedProduct = {
   _id?: string;
   productName: string;
@@ -49,6 +74,22 @@ export type CustomerPreferenceInfo = {
   note?: string;
 };
 
+export type StockConsumptionHistoryItem = {
+  _id?: string;
+  productId?: string;
+  productName?: string;
+  quantity?: number;
+  matchedMenuProductName?: string;
+};
+
+export type StockConsumptionHistoryRecord = {
+  _id?: string;
+  orderId?: string;
+  orderNumber?: string;
+  consumedAt?: string;
+  items?: StockConsumptionHistoryItem[];
+};
+
 export type GeneratedAiMenuItem = {
   _id?: string;
 
@@ -66,6 +107,8 @@ export type GeneratedAiMenuItem = {
   predictedQuantity: number;
   adjustedQuantity?: number;
   recommendedProductionQuantity?: number;
+
+  remainingQuantity?: number | null;
 
   confidence?: string;
   reliability?: string;
@@ -109,6 +152,8 @@ export type GeneratedAiMenu = {
 
   menuItems: GeneratedAiMenuItem[];
   ingredientList?: IngredientListItem[];
+  inventoryRequirementList?: InventoryRequirementItem[];
+  stockConsumptionHistory?: StockConsumptionHistoryRecord[];
 
   summary?: string;
   warnings?: string[];

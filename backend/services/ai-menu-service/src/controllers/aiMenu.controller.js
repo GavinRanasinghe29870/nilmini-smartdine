@@ -9,6 +9,12 @@ const {
   calculateIngredientRequirements,
 } = require("../services/ingredientCalculator.service");
 const {
+  getInventoryItemsFromInventoryService,
+} = require("../services/inventoryClient.service");
+const {
+  calculateInventoryRequirementList,
+} = require("../services/inventoryRequirement.service");
+const {
   getCustomerMenuPreference,
 } = require("../services/customerPreference.service");
 const {
@@ -58,6 +64,34 @@ function buildReason(item) {
   return `Manager review recommended because reliability is ${
     item.reliability || "Review"
   } and prediction type is ${item.predictionType || "unknown"}.`;
+}
+
+function getProductionQuantity(item) {
+  const quantity = Number(
+    item.recommendedProductionQuantity ??
+      item.adjustedQuantity ??
+      item.predictedQuantity ??
+      0
+  );
+
+  if (!Number.isFinite(quantity) || quantity < 0) {
+    return 0;
+  }
+
+  return Math.floor(quantity);
+}
+
+function initializeMenuStockFields(item) {
+  const productionQuantity = getProductionQuantity(item);
+
+  return {
+    ...item,
+    remainingQuantity: productionQuantity,
+    availability:
+      productionQuantity <= 0
+        ? "Out of Stock"
+        : item.availability || "In Stock",
+  };
 }
 
 function buildMenuItemsFromPredictions(predictions = []) {
@@ -127,7 +161,9 @@ function buildDefaultSummary(predictionDate, menuItems, customerPreference) {
     .slice(0, 5)
     .map(
       (item) =>
-        `${item.productName} (${Number(item.recommendedProductionQuantity || 0)})`
+        `${item.productName} (${Number(
+          item.recommendedProductionQuantity || 0
+        )})`
     )
     .join(", ");
 
@@ -196,7 +232,8 @@ function applyCustomerPreferenceAdjustments(menuItems, customerPreference) {
           : 0,
       preferenceScore: matchedPreference.preferenceScore ?? null,
       reason: `${item.productName} increased by ${adjustmentValue} units because ${
-        customerPreference.predictedCustomerGroup || "the predicted customer group"
+        customerPreference.predictedCustomerGroup ||
+        "the predicted customer group"
       } prefers this product.`,
     });
 
@@ -338,6 +375,32 @@ const generateMenu = async (req, res) => {
     const { ingredientList, warnings: ingredientWarnings } =
       calculateIngredientRequirements(adjustedMenuItems);
 
+    let inventoryRequirementList = [];
+    let inventoryWarnings = [];
+
+    try {
+      const inventoryItems = await getInventoryItemsFromInventoryService();
+
+      const inventoryResult = calculateInventoryRequirementList(
+        ingredientList,
+        inventoryItems
+      );
+
+      inventoryRequirementList = inventoryResult.inventoryRequirementList || [];
+      inventoryWarnings = inventoryResult.warnings || [];
+    } catch (inventoryError) {
+      console.error(
+        "Inventory requirement calculation skipped:",
+        inventoryError
+      );
+
+      inventoryWarnings = [
+        `Inventory requirement calculation skipped: ${
+          inventoryError.message || "Inventory service not available"
+        }`,
+      ];
+    }
+
     let geminiMenu = null;
 
     try {
@@ -353,16 +416,21 @@ const generateMenu = async (req, res) => {
     const finalMenuItems = mergeGeminiResultIntoMenuItems(
       adjustedMenuItems,
       geminiMenu?.menuItems || []
-    );
+    ).map(initializeMenuStockFields);
 
     const summary =
       geminiMenu?.summary ||
-      buildDefaultSummary(finalPredictionDate, finalMenuItems, customerPreference);
+      buildDefaultSummary(
+        finalPredictionDate,
+        finalMenuItems,
+        customerPreference
+      );
 
     const warnings = uniqueStrings([
       ...baseWarnings,
       ...productWarnings,
       ...ingredientWarnings,
+      ...inventoryWarnings,
       ...(Array.isArray(geminiMenu?.warnings) ? geminiMenu.warnings : []),
     ]);
 
@@ -373,6 +441,7 @@ const generateMenu = async (req, res) => {
       adjustedProducts,
       menuItems: finalMenuItems,
       ingredientList,
+      inventoryRequirementList,
       summary,
       warnings,
       rawGeminiResponse: geminiMenu || {},

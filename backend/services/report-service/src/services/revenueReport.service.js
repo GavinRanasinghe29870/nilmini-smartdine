@@ -9,6 +9,13 @@ const PRODUCT_SERVICE_URL =
 const INVENTORY_SERVICE_URL =
   process.env.INVENTORY_SERVICE_URL || "http://inventory-service:5003";
 
+const NO_INGREDIENTS_MARKERS = new Set([
+  "__no_ingredients__",
+  "no ingredient",
+  "no ingredients",
+  "none",
+]);
+
 function getColomboDateString(offsetDays = 0) {
   const now = new Date();
   const targetDate = new Date(now.getTime() + offsetDays * 24 * 60 * 60 * 1000);
@@ -48,12 +55,22 @@ function normalizeText(value) {
     .trim();
 }
 
+function normalizeId(value) {
+  if (!value) return "";
+
+  if (typeof value === "object") {
+    return String(value.id || value._id || value.$oid || "").trim();
+  }
+
+  return String(value).trim();
+}
+
 function parseQuantity(value) {
   if (typeof value === "number") return value;
 
   const match = String(value || "")
     .replace(/,/g, "")
-    .match(/[\d.]+/);
+    .match(/[-+]?\d*\.?\d+/);
 
   if (!match) return 0;
 
@@ -62,6 +79,11 @@ function parseQuantity(value) {
 
 function roundMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function isNoIngredientsMarker(name) {
+  const value = normalizeText(name);
+  return NO_INGREDIENTS_MARKERS.has(value);
 }
 
 function normalizeUnit(value) {
@@ -126,17 +148,34 @@ async function getInventoryItems() {
   return payload.data || [];
 }
 
+function addMapKey(map, key, value) {
+  const normalizedKey = String(key || "").trim();
+
+  if (normalizedKey) {
+    map.set(normalizedKey, value);
+  }
+}
+
+function addNormalizedMapKey(map, key, value) {
+  const normalizedKey = normalizeText(key);
+
+  if (normalizedKey) {
+    map.set(normalizedKey, value);
+  }
+}
+
 function buildProductMap(products) {
   const map = new Map();
 
   for (const product of products || []) {
-    const id = String(product.id || product._id || "").trim();
-    const name = normalizeText(product.name);
-    const itemId = normalizeText(product.itemId);
+    const id = normalizeId(product.id || product._id);
+    const itemId = product.itemId;
+    const name = product.name;
 
-    if (id) map.set(id, product);
-    if (name) map.set(name, product);
-    if (itemId) map.set(itemId, product);
+    addMapKey(map, id, product);
+    addMapKey(map, normalizeId(product._id), product);
+    addNormalizedMapKey(map, name, product);
+    addNormalizedMapKey(map, itemId, product);
   }
 
   return map;
@@ -146,7 +185,7 @@ function buildInventoryMap(inventoryItems) {
   const map = new Map();
 
   for (const item of inventoryItems || []) {
-    const id = String(item.id || item._id || "").trim();
+    const id = normalizeId(item.id || item._id);
 
     const possibleNames = [
       item.name,
@@ -156,16 +195,10 @@ function buildInventoryMap(inventoryItems) {
       item.inventoryName,
     ];
 
-    if (id) {
-      map.set(id, item);
-    }
+    addMapKey(map, id, item);
 
     for (const nameValue of possibleNames) {
-      const normalizedName = normalizeText(nameValue);
-
-      if (normalizedName) {
-        map.set(normalizedName, item);
-      }
+      addNormalizedMapKey(map, nameValue, item);
     }
   }
 
@@ -203,11 +236,18 @@ function getInventoryUnitCost(item) {
   return 0;
 }
 
-function calculateExpenseForOneProduct(product, inventoryMap) {
+function getValidIngredients(product) {
   const ingredients = Array.isArray(product?.ingredients)
     ? product.ingredients
     : [];
 
+  return ingredients.filter((ingredient) => {
+    const ingredientName = String(ingredient?.name || "").trim();
+    return ingredientName && !isNoIngredientsMarker(ingredientName);
+  });
+}
+
+function calculateExpenseForOneProduct(product, inventoryMap) {
   if (!product) {
     return {
       expensePerUnit: 0,
@@ -215,6 +255,8 @@ function calculateExpenseForOneProduct(product, inventoryMap) {
       missingIngredients: [],
     };
   }
+
+  const ingredients = getValidIngredients(product);
 
   if (ingredients.length === 0) {
     return {
@@ -287,6 +329,33 @@ function isValidOrder(order) {
   return order.orderStatus !== "Cancelled" && order.paymentStatus !== "Cancelled";
 }
 
+function getOrderItemProductId(item) {
+  return normalizeId(
+    item.productId || item.product?._id || item.product?.id || item._id || item.id
+  );
+}
+
+function getOrderItemProductName(item) {
+  return String(
+    item.productName || item.name || item.product?.name || item.itemName || ""
+  ).trim();
+}
+
+function findMatchedProduct(item, productMap) {
+  const productId = getOrderItemProductId(item);
+  const productName = getOrderItemProductName(item);
+  const itemId = item.itemId || item.productItemId || item.product?.itemId;
+
+  return (
+    productMap.get(productId) ||
+    productMap.get(normalizeId(item.productId?._id)) ||
+    productMap.get(normalizeId(item.productId?.id)) ||
+    productMap.get(normalizeText(productName)) ||
+    productMap.get(normalizeText(itemId)) ||
+    null
+  );
+}
+
 function buildRevenueRowsFromOrders(orders, productMap, inventoryMap) {
   const grouped = new Map();
   const expenseCache = new Map();
@@ -297,15 +366,14 @@ function buildRevenueRowsFromOrders(orders, productMap, inventoryMap) {
     const date = getOrderDate(order);
 
     for (const item of order.items || []) {
-      const productId = String(item.productId || "").trim();
-      const productName = String(item.productName || "").trim();
+      const productId = getOrderItemProductId(item);
+      const productName = getOrderItemProductName(item);
 
       if (!productName) continue;
 
-      const productKey = productId || normalizeText(productName);
-
-      const matchedProduct =
-        productMap.get(productId) || productMap.get(normalizeText(productName));
+      const matchedProduct = findMatchedProduct(item, productMap);
+      const productKey =
+        productId || matchedProduct?.id || normalizeText(productName);
 
       if (!expenseCache.has(productKey)) {
         expenseCache.set(
@@ -333,7 +401,7 @@ function buildRevenueRowsFromOrders(orders, productMap, inventoryMap) {
         grouped.set(groupKey, {
           id: groupKey,
           productId: productId || matchedProduct?.id || "",
-          itemId: matchedProduct?.itemId || "",
+          itemId: matchedProduct?.itemId || item.itemId || "",
           productName,
           categoryName: item.categoryName || matchedProduct?.categoryName || "",
           date,

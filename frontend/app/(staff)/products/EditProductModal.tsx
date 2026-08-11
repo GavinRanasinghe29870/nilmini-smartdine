@@ -35,6 +35,8 @@ type ProductForm = {
   ingredients: IngredientInput[];
 };
 
+const NO_INGREDIENTS_VALUE = "__NO_INGREDIENTS__";
+
 function getInitialForm(): ProductForm {
   return {
     name: "",
@@ -45,6 +47,64 @@ function getInitialForm(): ProductForm {
     image: "",
     ingredients: [{ name: "", quantity: "", unit: "" }],
   };
+}
+
+function getNoIngredientsRow(): IngredientInput {
+  return {
+    name: NO_INGREDIENTS_VALUE,
+    quantity: "",
+    unit: "",
+  };
+}
+
+function isNoIngredientName(name?: string) {
+  const value = String(name || "")
+    .trim()
+    .toLowerCase();
+
+  return (
+    value === NO_INGREDIENTS_VALUE.toLowerCase() ||
+    value === "no ingredients" ||
+    value === "no ingredient" ||
+    value === "none"
+  );
+}
+
+function normalizeUnitForForm(unit?: string) {
+  const value = String(unit || "")
+    .trim()
+    .toLowerCase();
+
+  if (["kg", "kilogram", "kilograms", "g", "gram", "grams"].includes(value)) {
+    return "g";
+  }
+
+  if (
+    [
+      "l",
+      "liter",
+      "litre",
+      "liters",
+      "litres",
+      "ml",
+      "milliliter",
+      "millilitre",
+      "milliliters",
+      "millilitres",
+    ].includes(value)
+  ) {
+    return "ml";
+  }
+
+  if (["piece", "pieces", "pcs", "pc", "unit", "units"].includes(value)) {
+    return "Piece";
+  }
+
+  return String(unit || "").trim();
+}
+
+function isNoIngredientsSelected(ingredients: IngredientInput[]) {
+  return ingredients.some((item) => item.name === NO_INGREDIENTS_VALUE);
 }
 
 export default function EditProductModal({
@@ -67,6 +127,10 @@ export default function EditProductModal({
 
   useEffect(() => {
     if (open && product) {
+      const productIngredients = Array.isArray(product.ingredients)
+        ? product.ingredients.filter((item) => !isNoIngredientName(item.name))
+        : [];
+
       setForm({
         name: product.name || "",
         categoryId: product.categoryId || "",
@@ -75,13 +139,13 @@ export default function EditProductModal({
         availability: product.availability || "In Stock",
         image: normalizeImageForDb(product.image),
         ingredients:
-          product.ingredients && product.ingredients.length > 0
-            ? product.ingredients.map((item) => ({
+          productIngredients.length > 0
+            ? productIngredients.map((item) => ({
                 name: item.name || "",
                 quantity: String(item.quantity || ""),
-                unit: item.unit || "",
+                unit: normalizeUnitForForm(item.unit),
               }))
-            : [{ name: "", quantity: "", unit: "" }],
+            : [getNoIngredientsRow()],
       });
 
       setPreview(getImageSrc(product.image));
@@ -107,7 +171,11 @@ export default function EditProductModal({
     }
   }, [open, product]);
 
+  const noIngredientsSelected = isNoIngredientsSelected(form.ingredients);
+
   const addIngredientRow = () => {
+    if (noIngredientsSelected) return;
+
     setForm((prev) => ({
       ...prev,
       ingredients: [...prev.ingredients, { name: "", quantity: "", unit: "" }],
@@ -115,6 +183,14 @@ export default function EditProductModal({
   };
 
   const updateIngredientSelection = (index: number, ingredientName: string) => {
+    if (ingredientName === NO_INGREDIENTS_VALUE) {
+      setForm((prev) => ({
+        ...prev,
+        ingredients: [getNoIngredientsRow()],
+      }));
+      return;
+    }
+
     const selectedIngredient = inventoryIngredients.find(
       (item) => item.name === ingredientName
     );
@@ -147,13 +223,22 @@ export default function EditProductModal({
   };
 
   const removeIngredientRow = (index: number) => {
-    setForm((prev) => ({
-      ...prev,
-      ingredients:
-        prev.ingredients.length === 1
-          ? [{ name: "", quantity: "", unit: "" }]
-          : prev.ingredients.filter((_, i) => i !== index),
-    }));
+    setForm((prev) => {
+      if (prev.ingredients[index]?.name === NO_INGREDIENTS_VALUE) {
+        return {
+          ...prev,
+          ingredients: [{ name: "", quantity: "", unit: "" }],
+        };
+      }
+
+      return {
+        ...prev,
+        ingredients:
+          prev.ingredients.length === 1
+            ? [{ name: "", quantity: "", unit: "" }]
+            : prev.ingredients.filter((_, i) => i !== index),
+      };
+    });
   };
 
   const isIngredientAlreadySelected = (
@@ -161,7 +246,10 @@ export default function EditProductModal({
     currentIndex: number
   ) => {
     return form.ingredients.some(
-      (item, index) => index !== currentIndex && item.name === ingredientName
+      (item, index) =>
+        index !== currentIndex &&
+        item.name !== NO_INGREDIENTS_VALUE &&
+        item.name === ingredientName
     );
   };
 
@@ -184,13 +272,18 @@ export default function EditProductModal({
         throw new Error("Valid price is required");
       }
 
-      const validIngredients = form.ingredients
-        .filter((item) => item.name.trim())
-        .map((item) => ({
-          name: item.name.trim(),
-          quantity: String(item.quantity || "").trim(),
-          unit: String(item.unit || "").trim(),
-        }));
+      const validIngredients = noIngredientsSelected
+        ? []
+        : form.ingredients
+            .filter(
+              (item) =>
+                item.name.trim() && item.name.trim() !== NO_INGREDIENTS_VALUE
+            )
+            .map((item) => ({
+              name: item.name.trim(),
+              quantity: String(item.quantity || "").trim(),
+              unit: String(item.unit || "").trim(),
+            }));
 
       for (const ingredient of validIngredients) {
         if (!ingredient.quantity || Number(ingredient.quantity) <= 0) {
@@ -356,7 +449,8 @@ export default function EditProductModal({
             <button
               type="button"
               onClick={addIngredientRow}
-              className="p-1 rounded-full bg-bg-1 hover:bg-bg-2"
+              disabled={noIngredientsSelected}
+              className="p-1 rounded-full bg-bg-1 hover:bg-bg-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus size={16} className="text-text-white" />
             </button>
@@ -369,8 +463,10 @@ export default function EditProductModal({
           )}
 
           {form.ingredients.map((ingredient, index) => {
+            const isNoIngredientsRow = ingredient.name === NO_INGREDIENTS_VALUE;
             const isExistingIngredientMissing =
               ingredient.name &&
+              !isNoIngredientsRow &&
               !inventoryIngredients.some((item) => item.name === ingredient.name);
 
             return (
@@ -386,11 +482,11 @@ export default function EditProductModal({
                   className="col-span-5 px-3 py-2 rounded-lg bg-bg-1 text-text-white"
                 >
                   <option value="">Select ingredient</option>
+                  <option value={NO_INGREDIENTS_VALUE}>No ingredients</option>
 
                   {isExistingIngredientMissing && (
                     <option value={ingredient.name}>
-                      {ingredient.name}{" "}
-                      {ingredient.unit ? `(${ingredient.unit})` : ""}
+                      {ingredient.name} {ingredient.unit ? `(${ingredient.unit})` : ""}
                     </option>
                   )}
 
@@ -410,18 +506,19 @@ export default function EditProductModal({
                 </select>
 
                 <input
-                  value={ingredient.quantity}
+                  value={isNoIngredientsRow ? "" : ingredient.quantity}
                   onChange={(e) =>
                     updateIngredientQuantity(index, e.target.value)
                   }
                   type="number"
                   min="0"
-                  className="col-span-3 px-3 py-2 rounded-lg bg-bg-1 text-text-white"
+                  disabled={isNoIngredientsRow}
+                  className="col-span-3 px-3 py-2 rounded-lg bg-bg-1 text-text-white disabled:text-gray-500 disabled:cursor-not-allowed"
                   placeholder="Qty"
                 />
 
                 <input
-                  value={ingredient.unit}
+                  value={isNoIngredientsRow ? "" : ingredient.unit}
                   readOnly
                   className="col-span-3 px-3 py-2 rounded-lg bg-bg-1 text-gray-300"
                   placeholder="Unit"
@@ -437,6 +534,12 @@ export default function EditProductModal({
               </div>
             );
           })}
+
+          {noIngredientsSelected && (
+            <p className="text-xs text-gray-500 mt-2">
+              This product will be saved without ingredient cost calculation.
+            </p>
+          )}
         </div>
 
         {error && <p className="text-sm text-red-400 mb-4">{error}</p>}

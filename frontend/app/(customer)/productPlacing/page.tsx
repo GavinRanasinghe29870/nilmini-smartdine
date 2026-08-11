@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ShoppingCart as ShoppingCartIcon,
   Grid3x3,
@@ -22,9 +23,11 @@ import {
   getProducts,
 } from "../../src/lib/api/product.api";
 import { createOrder } from "../../src/lib/api/order.api";
+import { getTodayAiMenu } from "../../src/lib/api/aiMenu.api";
 import type { CategoryDto } from "../../src/types/category";
 import type { ProductDto } from "../../src/types/product";
 import type { DayType } from "../../src/types/order";
+import type { GeneratedAiMenu, GeneratedAiMenuItem } from "../../src/types/aiMenu";
 
 const iconMap: Record<string, LucideIcon> = {
   Grid3x3,
@@ -53,6 +56,20 @@ type OrderForm = {
   dayType: DayType;
 };
 
+type TodayMenuStock = {
+  productId?: string;
+  itemId?: string;
+  productName: string;
+  quantity: number;
+  availability: string;
+};
+
+type ProductWithMenuStock = ProductDto & {
+  todayMenuQuantity?: number;
+  todayMenuAvailability?: string;
+  isInTodayMenu?: boolean;
+};
+
 function toNumber(value: number | string | undefined | null) {
   const result = Number(value);
 
@@ -61,6 +78,104 @@ function toNumber(value: number | string | undefined | null) {
   }
 
   return result;
+}
+
+function normalizeText(value?: string) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function compactText(value?: string) {
+  return normalizeText(value).replace(/\s+/g, "");
+}
+
+function getMatchKeys(value?: string) {
+  const normalized = normalizeText(value);
+  const compact = compactText(value);
+
+  const keys = new Set<string>();
+
+  if (normalized) keys.add(normalized);
+  if (compact) keys.add(compact);
+
+  return keys;
+}
+
+function getMenuItemLiveQuantity(item: GeneratedAiMenuItem) {
+  const quantity = Number(
+    item.recommendedProductionQuantity ??
+      item.adjustedQuantity ??
+      item.predictedQuantity ??
+      0
+  );
+
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return 0;
+  }
+
+  return Math.floor(quantity);
+}
+
+function buildTodayMenuStockMap(menu: GeneratedAiMenu | null) {
+  const map = new Map<string, TodayMenuStock>();
+
+  if (!menu || menu.status !== "approved" || !Array.isArray(menu.menuItems)) {
+    return map;
+  }
+
+  menu.menuItems.forEach((item: GeneratedAiMenuItem) => {
+    const liveQuantity = getMenuItemLiveQuantity(item);
+
+    const stock: TodayMenuStock = {
+      productId: item.productId,
+      itemId: item.itemId,
+      productName: item.productName,
+      quantity: liveQuantity,
+      availability: liveQuantity <= 0 ? "Out of Stock" : "In Stock",
+    };
+
+    const values = [
+      item.productId,
+      item.itemId,
+      item.productDbName,
+      item.productName,
+    ];
+
+    values.forEach((value) => {
+      getMatchKeys(value).forEach((key) => {
+        if (!map.has(key)) {
+          map.set(key, stock);
+        }
+      });
+    });
+  });
+
+  return map;
+}
+
+function findTodayMenuStock(
+  stockMap: Map<string, TodayMenuStock>,
+  product: ProductDto
+) {
+  const values = [product.id, product.itemId, product.name];
+
+  for (const value of values) {
+    for (const key of getMatchKeys(value)) {
+      const stock = stockMap.get(key);
+
+      if (stock) {
+        return stock;
+      }
+    }
+  }
+
+  return null;
 }
 
 function getProductIngredients(product: ProductDto | null) {
@@ -78,8 +193,12 @@ function getProductIngredients(product: ProductDto | null) {
 }
 
 export default function ProductPlacingPage() {
+  const router = useRouter();
+
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [todayMenu, setTodayMenu] = useState<GeneratedAiMenu | null>(null);
+
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -87,9 +206,8 @@ export default function ProductPlacingPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [quantity, setQuantity] = useState(1);
 
-  const [selectedProduct, setSelectedProduct] = useState<ProductDto | null>(
-    null
-  );
+  const [selectedProduct, setSelectedProduct] =
+    useState<ProductWithMenuStock | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isOrderDetailsOpen, setIsOrderDetailsOpen] = useState(false);
@@ -97,8 +215,8 @@ export default function ProductPlacingPage() {
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
 
-  const [orderForm, setOrderForm] = useState<OrderForm>({
-    ageGroup: "Young Adults",
+  const [orderForm] = useState<OrderForm>({
+    ageGroup: "Not Provided",
     groupSize: "1",
     weather: "Normal",
     dayType: "Work Day",
@@ -109,13 +227,12 @@ export default function ProductPlacingPage() {
       setLoading(true);
       setError("");
 
-      const [productData, categoryData] = await Promise.all([
-        getProducts(),
-        getCategories(),
-      ]);
+      const [productData, categoryData, todayMenuResponse] =
+        await Promise.all([getProducts(), getCategories(), getTodayAiMenu()]);
 
       setProducts(productData);
       setCategories(categoryData);
+      setTodayMenu(todayMenuResponse.data || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load products");
     } finally {
@@ -127,32 +244,70 @@ export default function ProductPlacingPage() {
     loadData();
   }, []);
 
+  const todayMenuStockMap = useMemo(() => {
+    return buildTodayMenuStockMap(todayMenu);
+  }, [todayMenu]);
+
+  const displayProducts = useMemo<ProductWithMenuStock[]>(() => {
+    const hasTodayMenu = todayMenu?.status === "approved";
+
+    return products
+      .map((product) => {
+        const todayStock = findTodayMenuStock(todayMenuStockMap, product);
+
+        if (!hasTodayMenu) {
+          return {
+            ...product,
+            todayMenuQuantity: undefined,
+            todayMenuAvailability: product.availability,
+            isInTodayMenu: false,
+          };
+        }
+
+        if (!todayStock) {
+          return null;
+        }
+
+        return {
+          ...product,
+          todayMenuQuantity: todayStock.quantity,
+          todayMenuAvailability: todayStock.availability,
+          availability:
+            todayStock.quantity <= 0 ? "Out of Stock" : product.availability,
+          isInTodayMenu: true,
+        };
+      })
+      .filter(Boolean) as ProductWithMenuStock[];
+  }, [products, todayMenu, todayMenuStockMap]);
+
   const allCategories = useMemo(() => {
     return [
       {
         id: "all",
         name: "All",
         description: "All available products",
-        count: products.length,
+        count: displayProducts.length,
         icon: "Grid3x3",
         image: "",
       },
       ...categories.map((category) => ({
         ...category,
-        count: products.filter(
+        count: displayProducts.filter(
           (product) => product.categoryName === category.name
         ).length,
       })),
     ];
-  }, [categories, products]);
+  }, [categories, displayProducts]);
 
   const filteredProducts = useMemo(() => {
     if (selectedCategory === "All") {
-      return products;
+      return displayProducts;
     }
 
-    return products.filter((item) => item.categoryName === selectedCategory);
-  }, [products, selectedCategory]);
+    return displayProducts.filter(
+      (item) => item.categoryName === selectedCategory
+    );
+  }, [displayProducts, selectedCategory]);
 
   const cartCount = useMemo(() => {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -161,6 +316,14 @@ export default function ProductPlacingPage() {
   const cartTotal = useMemo(() => {
     return cartItems.reduce((sum, item) => sum + item.lineTotal, 0);
   }, [cartItems]);
+
+  const getAvailableQuantityForProduct = (productId: string) => {
+    const product = displayProducts.find((item) => item.id === productId);
+
+    if (!product) return undefined;
+
+    return product.todayMenuQuantity;
+  };
 
   const handleAddToCart = () => {
     if (!selectedProduct) return;
@@ -174,6 +337,30 @@ export default function ProductPlacingPage() {
 
     if (!productId) {
       setError("Product ID is missing. Please refresh and try again.");
+      return;
+    }
+
+    const availableQuantity = selectedProduct.todayMenuQuantity;
+
+    if (
+      selectedProduct.availability === "Out of Stock" ||
+      selectedProduct.todayMenuAvailability === "Out of Stock" ||
+      availableQuantity === 0
+    ) {
+      setError("This product is out of stock in today's menu.");
+      return;
+    }
+
+    const existingCartQuantity =
+      cartItems.find((item) => item.productId === productId)?.quantity || 0;
+
+    if (
+      availableQuantity !== undefined &&
+      existingCartQuantity + quantity > availableQuantity
+    ) {
+      setError(
+        `Only ${availableQuantity} item(s) available in today's menu for ${selectedProduct.name}.`
+      );
       return;
     }
 
@@ -217,7 +404,22 @@ export default function ProductPlacingPage() {
   };
 
   const handleQuantityChange = (delta: number) => {
-    setQuantity((prev) => Math.max(1, prev + delta));
+    if (!selectedProduct) {
+      setQuantity((prev) => Math.max(1, prev + delta));
+      return;
+    }
+
+    const availableQuantity = selectedProduct.todayMenuQuantity;
+
+    setQuantity((prev) => {
+      const nextQuantity = Math.max(1, prev + delta);
+
+      if (availableQuantity !== undefined) {
+        return Math.min(nextQuantity, Math.max(1, availableQuantity));
+      }
+
+      return nextQuantity;
+    });
   };
 
   const handleRemoveCartItem = (productId: string) => {
@@ -228,6 +430,23 @@ export default function ProductPlacingPage() {
     if (cartItems.length === 0) {
       setError(
         "Please add at least one product to the cart before placing an order."
+      );
+      return;
+    }
+
+    const invalidCartItem = cartItems.find((cartItem) => {
+      const availableQuantity = getAvailableQuantityForProduct(
+        cartItem.productId
+      );
+
+      return (
+        availableQuantity !== undefined && cartItem.quantity > availableQuantity
+      );
+    });
+
+    if (invalidCartItem) {
+      setError(
+        `${invalidCartItem.name} quantity is higher than today's menu balance. Please update the cart.`
       );
       return;
     }
@@ -268,6 +487,13 @@ export default function ProductPlacingPage() {
     }
   };
 
+  const handleOrderPopupClose = () => {
+    setIsOrderPopupOpen(false);
+
+    // This redirects to http://localhost:3000/ in local development.
+    router.replace("/");
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <header className="bg-bg-2 px-6 py-4 border-b border-gray-800">
@@ -281,7 +507,7 @@ export default function ProductPlacingPage() {
           <div className="hidden md:flex items-center justify-between w-[360px] lg:w-[420px] h-[72px] rounded-xl px-5 bg-gradient-to-r from-bg-1 to-button border border-primary/20 shadow-lg overflow-hidden">
             <div>
               <p className="text-[11px] uppercase tracking-widest text-primary font-bold">
-                Today’s Special
+                Today’s Menu
               </p>
               <p className="text-sm font-semibold text-text-white">
                 Fresh meals. Fast pickup.
@@ -292,8 +518,8 @@ export default function ProductPlacingPage() {
             </div>
 
             <div className="bg-primary text-text-black rounded-lg px-3 py-2 text-center">
-              <p className="text-[10px] font-bold uppercase">Hot</p>
-              <p className="text-sm font-extrabold">Menu</p>
+              <p className="text-[10px] font-bold uppercase">Live</p>
+              <p className="text-sm font-extrabold">Stock</p>
             </div>
           </div>
         </div>
@@ -372,6 +598,10 @@ export default function ProductPlacingPage() {
                 {filteredProducts.map((product) => {
                   const productPrice = toNumber(product.price);
                   const imageSrc = getImageSrc(product.image);
+                  const displayAvailability =
+                    product.todayMenuQuantity === 0
+                      ? "Out of Stock"
+                      : product.availability;
 
                   return (
                     <button
@@ -416,14 +646,20 @@ export default function ProductPlacingPage() {
                           LKR {productPrice.toFixed(0)}
                         </p>
 
+                        {product.todayMenuQuantity !== undefined && (
+                          <p className="text-xs text-gray-400 mt-2">
+                            Today balance: {product.todayMenuQuantity}
+                          </p>
+                        )}
+
                         <p
                           className={`text-xs mt-2 font-medium ${
-                            product.availability === "In Stock"
+                            displayAvailability === "In Stock"
                               ? "text-green-400"
                               : "text-red-400"
                           }`}
                         >
-                          {product.availability}
+                          {displayAvailability}
                         </p>
                       </div>
                     </button>
@@ -483,7 +719,11 @@ export default function ProductPlacingPage() {
         productImage={getImageSrc(selectedProduct?.image)}
         description={selectedProduct?.description || ""}
         ingredients={getProductIngredients(selectedProduct)}
-        availability={selectedProduct?.availability}
+        availability={
+          selectedProduct?.todayMenuQuantity === 0
+            ? "Out of Stock"
+            : selectedProduct?.availability
+        }
         onQuantityChange={handleQuantityChange}
         onAddToCart={handleAddToCart}
       />
@@ -496,92 +736,8 @@ export default function ProductPlacingPage() {
             </h2>
 
             <p className="text-sm text-gray-400 mb-6">
-              Please add customer and environment details before placing the
-              order.
+              Please check the selected products before placing the order.
             </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div>
-                <label className="block text-xs text-gray-400 mb-2">
-                  Age Group
-                </label>
-                <select
-                  value={orderForm.ageGroup}
-                  onChange={(e) =>
-                    setOrderForm((prev) => ({
-                      ...prev,
-                      ageGroup: e.target.value,
-                    }))
-                  }
-                  className="w-full bg-[#1a1926] border border-gray-700 rounded-xl px-4 py-3 text-sm outline-none"
-                >
-                  <option>Children</option>
-                  <option>Teenagers</option>
-                  <option>Young Adults</option>
-                  <option>Adults</option>
-                  <option>Elders</option>
-                  <option>Mixed</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-400 mb-2">
-                  Group Size
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={orderForm.groupSize}
-                  onChange={(e) =>
-                    setOrderForm((prev) => ({
-                      ...prev,
-                      groupSize: e.target.value,
-                    }))
-                  }
-                  className="w-full bg-[#1a1926] border border-gray-700 rounded-xl px-4 py-3 text-sm outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-400 mb-2">
-                  Weather
-                </label>
-                <select
-                  value={orderForm.weather}
-                  onChange={(e) =>
-                    setOrderForm((prev) => ({
-                      ...prev,
-                      weather: e.target.value,
-                    }))
-                  }
-                  className="w-full bg-[#1a1926] border border-gray-700 rounded-xl px-4 py-3 text-sm outline-none"
-                >
-                  <option>Normal</option>
-                  <option>Sunny</option>
-                  <option>Cloudy</option>
-                  <option>Rainy</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-400 mb-2">
-                  Day Type
-                </label>
-                <select
-                  value={orderForm.dayType}
-                  onChange={(e) =>
-                    setOrderForm((prev) => ({
-                      ...prev,
-                      dayType: e.target.value as DayType,
-                    }))
-                  }
-                  className="w-full bg-[#1a1926] border border-gray-700 rounded-xl px-4 py-3 text-sm outline-none"
-                >
-                  <option value="Work Day">Work Day</option>
-                  <option value="Holiday">Holiday</option>
-                </select>
-              </div>
-            </div>
 
             <div className="bg-[#1a1926] border border-gray-700 rounded-2xl p-4 mb-6 max-h-52 overflow-y-auto">
               <div className="flex justify-between text-sm font-semibold text-gray-300 mb-3">
@@ -656,8 +812,6 @@ export default function ProductPlacingPage() {
               {orderId}
             </div>
 
-            <div className="text-5xl mb-4">✨</div>
-
             <h2 className="text-2xl font-bold text-text-white mb-2">
               Order Placed!
             </h2>
@@ -677,7 +831,7 @@ export default function ProductPlacingPage() {
             </div>
 
             <button
-              onClick={() => setIsOrderPopupOpen(false)}
+              onClick={handleOrderPopupClose}
               className="w-full bg-primary hover:bg-yellow-400 text-black
               font-bold text-lg py-4 rounded-xl transition shadow-lg shadow-primary/10"
               type="button"

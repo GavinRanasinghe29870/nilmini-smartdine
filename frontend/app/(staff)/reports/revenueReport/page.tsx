@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LineChart,
   Line,
@@ -60,6 +60,70 @@ function formatNullableCurrency(value?: number) {
 
 function formatDateRange(startDate: string, endDate: string) {
   return `${startDate} – ${endDate}`;
+}
+
+type DatePickerFieldProps = {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+};
+
+function openNativePicker(input: HTMLInputElement | null) {
+  if (!input) return;
+
+  input.focus();
+
+  const pickerInput = input as HTMLInputElement & {
+    showPicker?: () => void;
+  };
+
+  if (typeof pickerInput.showPicker === "function") {
+    try {
+      pickerInput.showPicker();
+    } catch {
+      // Browser may block showPicker outside direct user action.
+      // Focus still keeps the native input usable.
+    }
+  }
+}
+
+function DatePickerField({ label, value, onChange }: DatePickerFieldProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => openNativePicker(inputRef.current)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openNativePicker(inputRef.current);
+        }
+      }}
+      className="flex items-center gap-2 bg-bg-1 border border-white/10 rounded-lg px-4 py-2 text-white cursor-pointer"
+    >
+      <Calendar size={18} className="text-primary shrink-0" />
+
+      <div className="flex flex-col">
+        <span className="text-[11px] leading-none text-gray-400">
+          {label}
+        </span>
+
+        <input
+          ref={inputRef}
+          type="date"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onClick={(event) => {
+            event.stopPropagation();
+            openNativePicker(event.currentTarget);
+          }}
+          className="bg-transparent text-sm text-white outline-none cursor-pointer [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function RevenueReportPage() {
@@ -196,103 +260,111 @@ export default function RevenueReportPage() {
   ];
 
   return (
-    <div className="p-6 space-y-6 bg-bg-1 min-h-screen">
-      <div>
-        <div className="flex items-center gap-3 mb-6">
-          <button
-            onClick={() => router.back()}
-            className="p-2 rounded-full bg-bg-2 hover:bg-bg-1"
-          >
-            <ArrowLeft size={18} />
-          </button>
+    <main className="flex-1 p-8 space-y-6 bg-bg-1 min-h-screen text-white">
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => router.back()}
+          className="p-2 rounded-full bg-bg-2 hover:bg-bg-1"
+          type="button"
+        >
+          <ArrowLeft size={18} />
+        </button>
 
+        <div>
           <h1 className="text-h4 font-semibold">Revenue Report</h1>
+          <p className="text-sm text-gray-400">
+            View sales income, ingredient cost, profit, and sold quantities.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-4 mb-6">
+        {reportTabs.map((tab) => {
+          const isActive = pathname === tab.path;
+
+          return (
+            <button
+              key={tab.path}
+              onClick={() => router.push(tab.path)}
+              className={`px-4 py-2 rounded-md text-sm font-medium ${
+                isActive
+                  ? "bg-primary text-black"
+                  : "text-gray-400 hover:text-gray-200"
+              }`}
+              type="button"
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="bg-bg-2 rounded-xl p-4 mb-6 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 border border-white/10">
+        <div>
+          <h2 className="text-lg font-semibold text-white">
+            Revenue Report Filters
+          </h2>
+          <p className="text-sm text-gray-400">
+            Selected period: {formatDateRange(startDate, endDate)}
+          </p>
         </div>
 
-        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-          <div className="flex flex-wrap gap-3">
-            {reportTabs.map((tab) => {
-              const isActive = pathname === tab.path;
+        <div className="flex flex-wrap items-center gap-3">
+          <DatePickerField
+            label="Start Date"
+            value={startDate}
+            onChange={setStartDate}
+          />
 
-              return (
-                <button
-                  key={tab.path}
-                  onClick={() => router.push(tab.path)}
-                  className={`px-5 py-2 rounded-lg text-sm font-medium transition ${
-                    isActive
-                      ? "bg-primary text-text-black"
-                      : "bg-bg-2 text-gray-400 hover:bg-bg-1"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
+          <DatePickerField
+            label="End Date"
+            value={endDate}
+            onChange={setEndDate}
+          />
+
+          <div className="flex items-center gap-2 bg-bg-1 border border-white/10 rounded-lg px-4 py-2">
+            <Search size={16} className="text-gray-400" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search product..."
+              className="bg-transparent outline-none text-sm text-white placeholder:text-gray-500 w-40"
+            />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-bg-2 text-paragraph">
-              <Calendar size={16} />
-              <span>{formatDateRange(startDate, endDate)}</span>
-            </div>
+          <select
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value)}
+            className="bg-bg-1 border border-white/10 rounded-lg px-4 py-2 text-white outline-none"
+          >
+            <option value="date">Sort by Date</option>
+            <option value="productName">Sort by Product</option>
+            <option value="revenue">Sort by Revenue</option>
+            <option value="ingredientCost">Sort by Ingredient Cost</option>
+            <option value="profit">Sort by Profit</option>
+            <option value="totalQuantity">Sort by Quantity</option>
+          </select>
 
-            <input
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-              className="px-3 py-2 rounded-xl bg-bg-2 text-text-white outline-none"
-            />
+          <select
+            value={sortOrder}
+            onChange={(event) =>
+              setSortOrder(event.target.value as "asc" | "desc")
+            }
+            className="bg-bg-1 border border-white/10 rounded-lg px-4 py-2 text-white outline-none"
+          >
+            <option value="desc">Desc</option>
+            <option value="asc">Asc</option>
+          </select>
 
-            <input
-              type="date"
-              value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
-              className="px-3 py-2 rounded-xl bg-bg-2 text-text-white outline-none"
-            />
-
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-2">
-              <Search size={16} className="text-gray-400" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search product..."
-                className="bg-transparent outline-none text-sm text-text-white placeholder:text-gray-500 w-40"
-              />
-            </div>
-
-            <select
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
-              className="px-3 py-2 rounded-xl bg-bg-2 text-text-white outline-none"
-            >
-              <option value="date">Sort by Date</option>
-              <option value="productName">Sort by Product</option>
-              <option value="revenue">Sort by Revenue</option>
-              <option value="ingredientCost">Sort by Ingredient Cost</option>
-              <option value="profit">Sort by Profit</option>
-              <option value="totalQuantity">Sort by Quantity</option>
-            </select>
-
-            <select
-              value={sortOrder}
-              onChange={(event) =>
-                setSortOrder(event.target.value as "asc" | "desc")
-              }
-              className="px-3 py-2 rounded-xl bg-bg-2 text-text-white outline-none"
-            >
-              <option value="desc">Desc</option>
-              <option value="asc">Asc</option>
-            </select>
-
-            <button
-              onClick={loadReport}
-              disabled={loading}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary text-text-black text-paragraph font-medium whitespace-nowrap disabled:opacity-60"
-            >
-              {loading && <Loader2 size={16} className="animate-spin" />}
-              Generate Report
-            </button>
-          </div>
+          <button
+            onClick={loadReport}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-lg font-medium whitespace-nowrap disabled:opacity-60"
+            type="button"
+          >
+            {loading && <Loader2 size={16} className="animate-spin" />}
+            Generate Report
+          </button>
         </div>
       </div>
 
@@ -468,6 +540,6 @@ export default function RevenueReportPage() {
           No revenue records found for the selected date range.
         </div>
       )}
-    </div>
+    </main>
   );
 }

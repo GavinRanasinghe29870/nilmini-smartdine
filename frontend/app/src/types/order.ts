@@ -44,13 +44,36 @@ export type OrderDto = {
 };
 
 export type CreateOrderPayload = {
-  ageGroup: string;
-  groupSize: number;
-  weather: string;
-  dayType: DayType;
+  ageGroup?: string;
+  groupSize?: number;
+  weather?: string;
+  dayType?: DayType;
   paymentMethod?: PaymentMethod | string;
   note?: string;
   items: {
+    productId: string;
+    productName: string;
+    categoryName?: string;
+    image?: string;
+    quantity: number;
+    unitPrice: number;
+  }[];
+};
+
+export type UpdateOrderPayload = {
+  ageGroup?: string;
+  groupSize?: number;
+  weather?: string;
+  dayType?: DayType;
+  paymentMethod?: PaymentMethod | string;
+  note?: string;
+  orderStatus?: OrderStatus;
+  paymentStatus?: PaymentStatus;
+  discountAmount?: number;
+  paidAmount?: number;
+  balanceAmount?: number;
+  paidAt?: string | null;
+  items?: {
     productId: string;
     productName: string;
     categoryName?: string;

@@ -31,6 +31,8 @@ type ProductForm = {
   ingredients: IngredientInput[];
 };
 
+const NO_INGREDIENTS_VALUE = "__NO_INGREDIENTS__";
+
 function getInitialForm(): ProductForm {
   return {
     name: "",
@@ -41,6 +43,18 @@ function getInitialForm(): ProductForm {
     image: "",
     ingredients: [{ name: "", quantity: "", unit: "" }],
   };
+}
+
+function getNoIngredientsRow(): IngredientInput {
+  return {
+    name: NO_INGREDIENTS_VALUE,
+    quantity: "",
+    unit: "",
+  };
+}
+
+function isNoIngredientsSelected(ingredients: IngredientInput[]) {
+  return ingredients.some((item) => item.name === NO_INGREDIENTS_VALUE);
 }
 
 export default function AddProductModal({
@@ -86,7 +100,11 @@ export default function AddProductModal({
     }
   }, [open]);
 
+  const noIngredientsSelected = isNoIngredientsSelected(form.ingredients);
+
   const addIngredientRow = () => {
+    if (noIngredientsSelected) return;
+
     setForm((prev) => ({
       ...prev,
       ingredients: [...prev.ingredients, { name: "", quantity: "", unit: "" }],
@@ -94,6 +112,14 @@ export default function AddProductModal({
   };
 
   const updateIngredientSelection = (index: number, ingredientName: string) => {
+    if (ingredientName === NO_INGREDIENTS_VALUE) {
+      setForm((prev) => ({
+        ...prev,
+        ingredients: [getNoIngredientsRow()],
+      }));
+      return;
+    }
+
     const selectedIngredient = inventoryIngredients.find(
       (item) => item.name === ingredientName
     );
@@ -126,13 +152,22 @@ export default function AddProductModal({
   };
 
   const removeIngredientRow = (index: number) => {
-    setForm((prev) => ({
-      ...prev,
-      ingredients:
-        prev.ingredients.length === 1
-          ? [{ name: "", quantity: "", unit: "" }]
-          : prev.ingredients.filter((_, i) => i !== index),
-    }));
+    setForm((prev) => {
+      if (prev.ingredients[index]?.name === NO_INGREDIENTS_VALUE) {
+        return {
+          ...prev,
+          ingredients: [{ name: "", quantity: "", unit: "" }],
+        };
+      }
+
+      return {
+        ...prev,
+        ingredients:
+          prev.ingredients.length === 1
+            ? [{ name: "", quantity: "", unit: "" }]
+            : prev.ingredients.filter((_, i) => i !== index),
+      };
+    });
   };
 
   const isIngredientAlreadySelected = (
@@ -140,7 +175,10 @@ export default function AddProductModal({
     currentIndex: number
   ) => {
     return form.ingredients.some(
-      (item, index) => index !== currentIndex && item.name === ingredientName
+      (item, index) =>
+        index !== currentIndex &&
+        item.name !== NO_INGREDIENTS_VALUE &&
+        item.name === ingredientName
     );
   };
 
@@ -161,13 +199,18 @@ export default function AddProductModal({
         throw new Error("Valid price is required");
       }
 
-      const validIngredients = form.ingredients
-        .filter((item) => item.name.trim())
-        .map((item) => ({
-          name: item.name.trim(),
-          quantity: String(item.quantity || "").trim(),
-          unit: String(item.unit || "").trim(),
-        }));
+      const validIngredients = noIngredientsSelected
+        ? []
+        : form.ingredients
+            .filter(
+              (item) =>
+                item.name.trim() && item.name.trim() !== NO_INGREDIENTS_VALUE
+            )
+            .map((item) => ({
+              name: item.name.trim(),
+              quantity: String(item.quantity || "").trim(),
+              unit: String(item.unit || "").trim(),
+            }));
 
       for (const ingredient of validIngredients) {
         if (!ingredient.quantity || Number(ingredient.quantity) <= 0) {
@@ -330,7 +373,8 @@ export default function AddProductModal({
             <button
               type="button"
               onClick={addIngredientRow}
-              className="p-1 rounded-full bg-bg-1 hover:bg-bg-2"
+              disabled={noIngredientsSelected}
+              className="p-1 rounded-full bg-bg-1 hover:bg-bg-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus size={16} className="text-text-white" />
             </button>
@@ -342,62 +386,74 @@ export default function AddProductModal({
             </p>
           )}
 
-          {form.ingredients.map((ingredient, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-12 gap-2 mb-2 items-center"
-            >
-              <select
-                value={ingredient.name}
-                onChange={(e) =>
-                  updateIngredientSelection(index, e.target.value)
-                }
-                className="col-span-5 px-3 py-2 rounded-lg bg-bg-1 text-text-white"
+          {form.ingredients.map((ingredient, index) => {
+            const isNoIngredientsRow = ingredient.name === NO_INGREDIENTS_VALUE;
+
+            return (
+              <div
+                key={index}
+                className="grid grid-cols-12 gap-2 mb-2 items-center"
               >
-                <option value="">Select ingredient</option>
+                <select
+                  value={ingredient.name}
+                  onChange={(e) =>
+                    updateIngredientSelection(index, e.target.value)
+                  }
+                  className="col-span-5 px-3 py-2 rounded-lg bg-bg-1 text-text-white"
+                >
+                  <option value="">Select ingredient</option>
+                  <option value={NO_INGREDIENTS_VALUE}>No ingredients</option>
 
-                {inventoryIngredients.map((item) => {
-                  const unit = getInventoryIngredientUnit(item);
+                  {inventoryIngredients.map((item) => {
+                    const unit = getInventoryIngredientUnit(item);
 
-                  return (
-                    <option
-                      key={item.id || item._id || item.name}
-                      value={item.name}
-                      disabled={isIngredientAlreadySelected(item.name, index)}
-                    >
-                      {item.name} {unit ? `(${unit})` : ""}
-                    </option>
-                  );
-                })}
-              </select>
+                    return (
+                      <option
+                        key={item.id || item._id || item.name}
+                        value={item.name}
+                        disabled={isIngredientAlreadySelected(item.name, index)}
+                      >
+                        {item.name} {unit ? `(${unit})` : ""}
+                      </option>
+                    );
+                  })}
+                </select>
 
-              <input
-                value={ingredient.quantity}
-                onChange={(e) =>
-                  updateIngredientQuantity(index, e.target.value)
-                }
-                type="number"
-                min="0"
-                className="col-span-3 px-3 py-2 rounded-lg bg-bg-1 text-text-white"
-                placeholder="Qty"
-              />
+                <input
+                  value={isNoIngredientsRow ? "" : ingredient.quantity}
+                  onChange={(e) =>
+                    updateIngredientQuantity(index, e.target.value)
+                  }
+                  type="number"
+                  min="0"
+                  disabled={isNoIngredientsRow}
+                  className="col-span-3 px-3 py-2 rounded-lg bg-bg-1 text-text-white disabled:text-gray-500 disabled:cursor-not-allowed"
+                  placeholder="Qty"
+                />
 
-              <input
-                value={ingredient.unit}
-                readOnly
-                className="col-span-3 px-3 py-2 rounded-lg bg-bg-1 text-gray-300"
-                placeholder="Unit"
-              />
+                <input
+                  value={isNoIngredientsRow ? "" : ingredient.unit}
+                  readOnly
+                  className="col-span-3 px-3 py-2 rounded-lg bg-bg-1 text-gray-300"
+                  placeholder="Unit"
+                />
 
-              <button
-                type="button"
-                onClick={() => removeIngredientRow(index)}
-                className="col-span-1 flex justify-center items-center p-2 rounded-lg hover:bg-red-900/30"
-              >
-                <Trash2 size={15} className="text-red-400" />
-              </button>
-            </div>
-          ))}
+                <button
+                  type="button"
+                  onClick={() => removeIngredientRow(index)}
+                  className="col-span-1 flex justify-center items-center p-2 rounded-lg hover:bg-red-900/30"
+                >
+                  <Trash2 size={15} className="text-red-400" />
+                </button>
+              </div>
+            );
+          })}
+
+          {noIngredientsSelected && (
+            <p className="text-xs text-gray-500 mt-2">
+              This product will be saved without ingredient cost calculation.
+            </p>
+          )}
         </div>
 
         {error && <p className="text-sm text-red-400 mb-4">{error}</p>}

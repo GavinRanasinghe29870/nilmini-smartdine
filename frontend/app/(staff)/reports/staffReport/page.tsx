@@ -1,26 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Calendar, Loader2 } from "lucide-react";
-import DataTable, { Column } from "../../../src/components/DataTable";
-import { useRouter, usePathname } from "next/navigation";
-import { getStaffReport } from "../../../src/lib/api/staffReport.api";
-import type {
-  StaffReportResponse,
-  StaffReportRow,
-} from "../../../src/types/staffReport";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  Calendar,
+  RefreshCcw,
+  Wallet,
+  Banknote,
+  HandCoins,
+  ListChecks,
+} from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 
-/* Types */
-type StaffReport = {
-  staffId: string;
-  staffName: string;
-  role: string;
-  period: string;
-  attendance: string;
-  absentLeave: string;
-  expenses: string;
-  totalPayment: string;
-};
+import DataTable, { Column } from "../../../src/components/DataTable";
+import {
+  getStaffExpenseSummary,
+  getStaffExpenses,
+} from "../../../src/lib/api/staff.api";
+import { verify } from "../../../src/lib/auth";
+import type {
+  StaffExpense,
+  StaffExpenseSummary,
+  StaffExpenseType,
+  StaffRole,
+} from "../../../src/types/staff";
+
+const STAFF_PANEL_ROLES = ["OWNER", "MANAGER"];
 
 const reportTabs = [
   { label: "Revenue Report", path: "/reports/revenueReport" },
@@ -28,316 +33,494 @@ const reportTabs = [
   { label: "Sales Report", path: "/reports/salesReport" },
 ];
 
-function getColomboDateString(offsetDays = 0) {
+function getCurrentMonth() {
   const now = new Date();
-  const targetDate = new Date(now.getTime() + offsetDays * 24 * 60 * 60 * 1000);
 
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Colombo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(targetDate);
-
-  const year = parts.find((p) => p.type === "year")?.value;
-  const month = parts.find((p) => p.type === "month")?.value;
-  const day = parts.find((p) => p.type === "day")?.value;
-
-  return `${year}-${month}-${day}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function getCurrentMonthStart() {
-  const today = getColomboDateString(0);
-  const [year, month] = today.split("-");
-  return `${year}-${month}-01`;
+type MonthPickerFieldProps = {
+  value: string;
+  onChange: (value: string) => void;
+};
+
+function openNativePicker(input: HTMLInputElement | null) {
+  if (!input) return;
+
+  input.focus();
+
+  const pickerInput = input as HTMLInputElement & {
+    showPicker?: () => void;
+  };
+
+  if (typeof pickerInput.showPicker === "function") {
+    try {
+      pickerInput.showPicker();
+    } catch {
+      // Browser may block showPicker outside direct user action.
+      // Focus still keeps the native input usable.
+    }
+  }
 }
 
-function formatCurrency(value: number) {
+function MonthPickerField({ value, onChange }: MonthPickerFieldProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => openNativePicker(inputRef.current)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openNativePicker(inputRef.current);
+        }
+      }}
+      className="flex items-center gap-2 bg-bg-1 border border-white/10 rounded-lg px-4 py-2 text-white cursor-pointer"
+    >
+      <Calendar size={18} className="text-primary shrink-0" />
+
+      <input
+        ref={inputRef}
+        type="month"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onClick={(event) => {
+          event.stopPropagation();
+          openNativePicker(event.currentTarget);
+        }}
+        className="bg-transparent text-white outline-none cursor-pointer [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+      />
+    </div>
+  );
+}
+
+function formatMoney(value: number) {
   return `LKR ${Number(value || 0).toLocaleString("en-LK", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }
 
-function formatDateForDisplay(date: string) {
-  if (!date) return "-";
+function formatDate(value?: string) {
+  if (!value) return "-";
 
-  const parts = date.split("-");
-  if (parts.length !== 3) return date;
-
-  return `${parts[2]}.${parts[1]}.${parts[0]}`;
+  return new Date(value).toLocaleDateString("en-LK", {
+    timeZone: "Asia/Colombo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 }
 
-function formatPeriod(startDate: string, endDate: string) {
-  return `${formatDateForDisplay(startDate)} - ${formatDateForDisplay(endDate)}`;
+function getExpenseBadgeClass(type: StaffExpenseType) {
+  if (type === "Salary Payment") {
+    return "bg-green-500/10 text-green-300 border-green-500/30";
+  }
+
+  if (type === "Salary Advance") {
+    return "bg-yellow-500/10 text-yellow-300 border-yellow-500/30";
+  }
+
+  if (type === "Medical") {
+    return "bg-blue-500/10 text-blue-300 border-blue-500/30";
+  }
+
+  if (type === "Emergency") {
+    return "bg-red-500/10 text-red-300 border-red-500/30";
+  }
+
+  return "bg-purple-500/10 text-purple-300 border-purple-500/30";
 }
 
-function clampPercent(value: number) {
-  if (!Number.isFinite(value)) return 0;
-  if (value < 0) return 0;
-  if (value > 100) return 100;
-  return value;
-}
+const emptySummary: StaffExpenseSummary = {
+  totalSalaryPayments: 0,
+  totalStaffExtraExpenses: 0,
+  totalStaffExpenses: 0,
+  totalDeductibleAdvances: 0,
+  breakdown: [],
+};
 
-/* Table Columns */
-const columns: Column<StaffReport>[] = [
-  { key: "staffId", label: "Staff ID" },
-  { key: "staffName", label: "Staff Name" },
-  { key: "role", label: "Role", align: "center" },
-  { key: "period", label: "Report Period", align: "center" },
-  { key: "attendance", label: "Attendance", align: "center" },
-  { key: "absentLeave", label: "Absent / Leave", align: "center" },
-  { key: "expenses", label: "Staff expenses", align: "right" },
-  { key: "totalPayment", label: "Total Payment", align: "right" },
-];
-
-/* PAGE */
-export default function ReportsPage() {
+export default function StaffReportPage() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [showTooltip, setShowTooltip] = useState(false);
-  const [tooltipText, setTooltipText] = useState("");
+  const [currentUserRole, setCurrentUserRole] = useState<StaffRole>("STAFF");
+  const [allowed, setAllowed] = useState(false);
 
-  const [startDate] = useState(getCurrentMonthStart());
-  const [endDate] = useState(getColomboDateString(0));
+  const [paymentMonth, setPaymentMonth] = useState(getCurrentMonth());
+  const [summary, setSummary] = useState<StaffExpenseSummary>(emptySummary);
+  const [expenseRecords, setExpenseRecords] = useState<StaffExpense[]>([]);
 
-  const [report, setReport] = useState<StaffReportResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const [error, setError] = useState("");
 
-  async function loadReport() {
+  const loadReport = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
-      const result = await getStaffReport({
-        startDate,
-        endDate,
-        sortBy: "fullName",
-        sortOrder: "asc",
-      });
+      const [summaryData, recordsData] = await Promise.all([
+        getStaffExpenseSummary({
+          paymentMonth,
+        }),
+        getStaffExpenses({
+          paymentMonth,
+        }),
+      ]);
 
-      setReport(result);
+      setSummary(summaryData || emptySummary);
+      setExpenseRecords(recordsData || []);
     } catch (err) {
-      setReport(null);
-      setError(err instanceof Error ? err.message : "Failed to load staff report");
+      setError(
+        err instanceof Error ? err.message : "Failed to load staff report"
+      );
+      setSummary(emptySummary);
+      setExpenseRecords([]);
     } finally {
       setLoading(false);
     }
-  }
+  }, [paymentMonth]);
 
   useEffect(() => {
-    loadReport();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    async function init() {
+      try {
+        setCheckingAccess(true);
 
-  const summary = report?.summary;
+        const data = await verify();
+        const role = data?.user?.role as StaffRole;
 
-  const totalStaff = summary?.totalStaff || 0;
-  const totalIncome = Number(summary?.totalIncome || 0);
-  const staffExpenses = Number(
-    summary?.totalStaffExpenses ?? summary?.totalSalaryPaid ?? 0
-  );
+        if (!STAFF_PANEL_ROLES.includes(role)) {
+          router.replace("/login");
+          return;
+        }
 
-  const netIncomeAfterStaff = Math.max(totalIncome - staffExpenses, 0);
+        setCurrentUserRole(role);
+        setAllowed(true);
+      } catch {
+        router.replace("/login");
+      } finally {
+        setCheckingAccess(false);
+      }
+    }
 
-  const staffPaymentPercentage =
-    totalIncome > 0 ? clampPercent((staffExpenses / totalIncome) * 100) : 0;
+    init();
+  }, [router]);
 
-  const incomePercentage =
-    totalIncome > 0 ? clampPercent((netIncomeAfterStaff / totalIncome) * 100) : 0;
+  useEffect(() => {
+    if (allowed) {
+      loadReport();
+    }
+  }, [allowed, loadReport]);
 
-  const tableData: StaffReport[] = useMemo(() => {
-    const rows: StaffReportRow[] = report?.data || [];
+  const expenseColumns: Column<StaffExpense>[] = [
+    {
+      key: "staffName",
+      label: "Staff Member",
+      render: (record) => (
+        <div>
+          <p className="font-medium text-white">{record.staffName}</p>
+          <p className="text-xs text-gray-400">{record.role}</p>
+        </div>
+      ),
+    },
+    {
+      key: "expenseType",
+      label: "Expense Type",
+      render: (record) => (
+        <span
+          className={`inline-flex px-3 py-1 rounded-full border text-xs font-medium ${getExpenseBadgeClass(
+            record.expenseType
+          )}`}
+        >
+          {record.expenseType}
+        </span>
+      ),
+    },
+    {
+      key: "paymentMonth",
+      label: "Month",
+      render: (record) => record.paymentMonth,
+    },
+    {
+      key: "paidAt",
+      label: "Paid Date",
+      render: (record) => formatDate(record.paidAt),
+    },
+    {
+      key: "deductFromSalary",
+      label: "Deduct",
+      render: (record) =>
+        record.deductFromSalary ? (
+          <span className="text-yellow-300">Yes</span>
+        ) : (
+          <span className="text-gray-400">No</span>
+        ),
+    },
+    {
+      key: "amount",
+      label: "Amount",
+      align: "right",
+      render: (record) => formatMoney(record.amount),
+    },
+    {
+      key: "note",
+      label: "Note",
+      render: (record) => record.note || "-",
+    },
+  ];
 
-    return rows.map((row) => ({
-      staffId: row.staffId ? `#${row.staffId.slice(-6)}` : "-",
-      staffName: row.fullName || "-",
-      role: row.role || "-",
-      period: formatPeriod(startDate, endDate),
-      attendance: `Present ${row.presentDays} / Half ${row.halfShiftDays}`,
-      absentLeave: `Absent ${row.absentDays} / Leave ${row.leaveDays}`,
-      expenses: formatCurrency(row.totalPaid || 0),
-      totalPayment:
-        row.paymentCount > 0
-          ? formatCurrency(row.totalPayment || row.totalPaid || 0)
-          : "No Payment",
-    }));
-  }, [report, startDate, endDate]);
+  if (checkingAccess) {
+    return (
+      <main className="flex-1 p-8 bg-bg-1 min-h-screen text-white">
+        <p className="text-gray-400">Checking access...</p>
+      </main>
+    );
+  }
 
-  /* Donut values */
-  const radius = 80;
-  const stroke = 25;
-  const normalizedRadius = radius - stroke * 0.5;
-  const circumference = normalizedRadius * 2 * Math.PI;
-
-  const incomeDashoffset =
-    circumference - (incomePercentage / 100) * circumference;
-
-  const staffPaymentDashoffset =
-    circumference - (staffPaymentPercentage / 100) * circumference;
+  if (!allowed) return null;
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="items-center justify-between">
-        <div className="flex items-center gap-3 mb-6">
-          <button
-            onClick={() => router.back()}
-            className="p-2 rounded-full bg-bg-2 hover:bg-bg-1"
-          >
-            <ArrowLeft size={18} />
-          </button>
+    <main className="flex-1 p-8 bg-bg-1 min-h-screen text-white">
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => router.back()}
+          className="p-2 rounded-full bg-bg-2 hover:bg-bg-1"
+          type="button"
+        >
+          <ArrowLeft size={18} />
+        </button>
+
+        <div>
           <h1 className="text-h4 font-semibold">Staff Report</h1>
+          <p className="text-sm text-gray-400">
+            View salary payments, staff advances, emergency expenses, and total
+            staff expenses.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-4 mb-6">
+        {reportTabs.map((tab) => {
+          const active = pathname === tab.path;
+
+          return (
+            <button
+              key={tab.path}
+              onClick={() => router.push(tab.path)}
+              className={`px-4 py-2 rounded-md text-sm font-medium ${
+                active
+                  ? "bg-primary text-black"
+                  : "text-gray-400 hover:text-gray-200"
+              }`}
+              type="button"
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="bg-bg-2 rounded-xl p-4 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border border-white/10">
+        <div>
+          <h2 className="text-lg font-semibold text-white">
+            Staff Expense Summary
+          </h2>
+          <p className="text-sm text-gray-400">
+            Salary payments and extra staff expenses are calculated together.
+          </p>
         </div>
 
-        <div className="flex items-center justify-between">
-          {/* Tabs */}
-          <div className="flex gap-3">
-            {reportTabs.map((tab) => {
-              const isActive = pathname === tab.path;
+        <div className="flex items-center gap-3">
+          <MonthPickerField value={paymentMonth} onChange={setPaymentMonth} />
 
-              return (
-                <button
-                  key={tab.path}
-                  onClick={() => router.push(tab.path)}
-                  className={`px-5 py-2 rounded-lg text-sm font-medium transition
-                    ${
-                      isActive
-                        ? "bg-primary text-black"
-                        : "bg-bg-2 text-gray-400 hover:bg-bg-1"
-                    }
-                  `}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-bg-2 text-paragraph">
-              <Calendar size={16} />
-              <span>{formatPeriod(startDate, endDate)}</span>
-            </div>
-
-            <button
-              onClick={loadReport}
-              disabled={loading}
-              className="px-5 py-2 rounded-xl bg-primary text-text-black text-paragraph font-medium whitespace-nowrap flex items-center gap-2 disabled:opacity-60"
-            >
-              {loading && <Loader2 size={16} className="animate-spin" />}
-              Generate Report
-            </button>
-          </div>
+          <button
+            onClick={loadReport}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-lg"
+            type="button"
+          >
+            <RefreshCcw size={16} />
+            Refresh
+          </button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-xl text-sm">
+        <div className="bg-red-500/10 border border-red-500/30 text-red-300 rounded-lg px-4 py-3 mb-6">
           {error}
         </div>
       )}
 
-      {report?.warnings && report.warnings.length > 0 && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-200 px-4 py-3 rounded-xl text-sm">
-          {report.warnings.join(" | ")}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <SummaryCard
+          title="Salary Payments"
+          value={formatMoney(summary.totalSalaryPayments)}
+          icon={<Banknote size={22} />}
+        />
+
+        <SummaryCard
+          title="Advances / Extra Expenses"
+          value={formatMoney(summary.totalStaffExtraExpenses)}
+          icon={<HandCoins size={22} />}
+        />
+
+        <SummaryCard
+          title="Total Staff Expenses"
+          value={formatMoney(summary.totalStaffExpenses)}
+          icon={<Wallet size={22} />}
+          highlight
+        />
+
+        <SummaryCard
+          title="Deductible Advances"
+          value={formatMoney(summary.totalDeductibleAdvances)}
+          icon={<ListChecks size={22} />}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="lg:col-span-2 bg-bg-2 rounded-xl p-5 border border-white/10">
+          <h3 className="text-lg font-semibold mb-4">
+            Staff Expenses Breakdown
+          </h3>
+
+          {summary.breakdown.length === 0 ? (
+            <p className="text-gray-400 text-sm">
+              No staff expense records found for this month.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {summary.breakdown.map((item) => {
+                const percentage =
+                  summary.totalStaffExpenses > 0
+                    ? (item.totalAmount / summary.totalStaffExpenses) * 100
+                    : 0;
+
+                return (
+                  <div
+                    key={item.expenseType}
+                    className="bg-bg-1 rounded-lg p-4"
+                  >
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-white">{item.expenseType}</span>
+                      <span className="text-primary font-semibold">
+                        {formatMoney(item.totalAmount)}
+                      </span>
+                    </div>
+
+                    <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full"
+                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                      />
+                    </div>
+
+                    <p className="text-xs text-gray-400 mt-2">
+                      {item.count} record{item.count === 1 ? "" : "s"} ·{" "}
+                      {percentage.toFixed(1)}%
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      )}
 
-      {/* Chart Card */}
-      <div className="bg-bg-2 rounded-2xl p-6 w-[420px]">
-        <h2 className="text-h6 text-gray-300 mb-4">
-          Total Staff - {loading ? "..." : totalStaff}
-        </h2>
+        <div className="bg-bg-2 rounded-xl p-5 border border-white/10">
+          <h3 className="text-lg font-semibold mb-4">Report Notes</h3>
 
-        <div className="flex items-center gap-6">
-          {/* Donut Chart */}
-          <div className="relative">
-            {/* Tooltip */}
-            {showTooltip && (
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-bg-1 text-white text-xs px-3 py-1 rounded-md shadow-lg whitespace-nowrap">
-                {tooltipText}
-              </div>
-            )}
+          <div className="space-y-4 text-sm text-gray-400">
+            <p>
+              <span className="text-white font-medium">Salary Payments</span>{" "}
+              are normal monthly salary payments recorded from the Pay Salary
+              action.
+            </p>
 
-            <svg width={160} height={160}>
-              {/* Background circle */}
-              <circle
-                stroke="#1f1f1f"
-                fill="transparent"
-                strokeWidth={stroke}
-                r={normalizedRadius}
-                cx={80}
-                cy={80}
-              />
+            <p>
+              <span className="text-white font-medium">
+                Advances / Extra Expenses
+              </span>{" "}
+              include salary advances, medical, emergency, transport, food, and
+              other staff support payments.
+            </p>
 
-              {/* Income segment */}
-              <circle
-                stroke="var(--bg-1)"
-                fill="transparent"
-                strokeWidth={stroke}
-                strokeLinecap="round"
-                strokeDasharray={`${circumference} ${circumference}`}
-                strokeDashoffset={incomeDashoffset}
-                r={normalizedRadius}
-                cx={80}
-                cy={80}
-                transform="rotate(-90 80 80)"
-                style={{ pointerEvents: "stroke" }}
-                onMouseEnter={() => {
-                  setShowTooltip(true);
-                  setTooltipText(
-                    `Income after staff payments – ${incomePercentage.toFixed(
-                      1
-                    )}%`
-                  );
-                }}
-                onMouseLeave={() => setShowTooltip(false)}
-              />
+            <p>
+              <span className="text-white font-medium">
+                Total Staff Expenses
+              </span>{" "}
+              is calculated as salary payments plus all extra staff expenses.
+            </p>
 
-              {/* Staff payments segment */}
-              <circle
-                stroke="var(--primary)"
-                fill="transparent"
-                strokeWidth={stroke}
-                strokeLinecap="round"
-                strokeDasharray={`${circumference} ${circumference}`}
-                strokeDashoffset={staffPaymentDashoffset}
-                r={normalizedRadius}
-                cx={80}
-                cy={80}
-                transform={`rotate(${-90 + incomePercentage * 3.6} 80 80)`}
-                style={{ pointerEvents: "stroke" }}
-                onMouseEnter={() => {
-                  setShowTooltip(true);
-                  setTooltipText(
-                    `Staff payments – ${staffPaymentPercentage.toFixed(1)}%`
-                  );
-                }}
-                onMouseLeave={() => setShowTooltip(false)}
-              />
-            </svg>
-          </div>
-
-          {/* Legend */}
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-bg-1" />
-              <span>Income</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-primary" />
-              <span>Staff payments</span>
-            </div>
+            <p>
+              <span className="text-white font-medium">
+                Deductible Advances
+              </span>{" "}
+              shows salary advances that should be deducted during salary
+              settlement.
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Table */}
-      <DataTable columns={columns} data={tableData} />
+      <div className="bg-bg-2 rounded-xl p-5 border border-white/10">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h3 className="text-lg font-semibold">Staff Expense Records</h3>
+            <p className="text-sm text-gray-400">
+              Showing {expenseRecords.length} record
+              {expenseRecords.length === 1 ? "" : "s"} for {paymentMonth}.
+            </p>
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="text-gray-400">Loading staff report...</p>
+        ) : expenseRecords.length === 0 ? (
+          <p className="text-gray-400">
+            No staff expense records found for the selected month.
+          </p>
+        ) : (
+          <DataTable columns={expenseColumns} data={expenseRecords} />
+        )}
+      </div>
+    </main>
+  );
+}
+
+function SummaryCard({
+  title,
+  value,
+  icon,
+  highlight = false,
+}: {
+  title: string;
+  value: string;
+  icon: React.ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl p-5 border ${
+        highlight
+          ? "bg-primary text-black border-primary"
+          : "bg-bg-2 text-white border-white/10"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <p
+          className={`text-sm ${
+            highlight ? "text-black/70" : "text-gray-400"
+          }`}
+        >
+          {title}
+        </p>
+
+        <div className={highlight ? "text-black" : "text-primary"}>{icon}</div>
+      </div>
+
+      <p className="text-2xl font-bold">{value}</p>
     </div>
   );
 }

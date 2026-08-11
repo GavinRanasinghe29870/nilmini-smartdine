@@ -10,5 +10,7 @@ router.use(requireRole("OWNER", "MANAGER"));
 router.get("/", staffController.listUsers);
 router.get("/:id", staffController.getUserById);
 router.post("/", staffController.createUser);
+router.put("/:id", staffController.updateUser);
+router.delete("/:id", staffController.deleteUser);
 
 module.exports = router;

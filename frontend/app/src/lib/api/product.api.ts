@@ -74,13 +74,38 @@ export function normalizeImageForDb(image?: string) {
 }
 
 export function getInventoryIngredientUnit(item: InventoryIngredient) {
-  return (
-    item.unit ||
-    item.measureType ||
-    item.measuringType ||
-    item.measurementType ||
-    ""
-  );
+  const unit = String(
+    item.unit || item.measureType || item.measuringType || item.measurementType || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (["kg", "kilogram", "kilograms", "g", "gram", "grams"].includes(unit)) {
+    return "g";
+  }
+
+  if (
+    [
+      "l",
+      "liter",
+      "litre",
+      "liters",
+      "litres",
+      "ml",
+      "milliliter",
+      "millilitre",
+      "milliliters",
+      "millilitres",
+    ].includes(unit)
+  ) {
+    return "ml";
+  }
+
+  if (["piece", "pieces", "pcs", "pc", "unit", "units"].includes(unit)) {
+    return "Piece";
+  }
+
+  return "";
 }
 
 export async function uploadImage(file: File): Promise<string> {
@@ -147,9 +172,7 @@ export async function deleteProduct(id: string): Promise<void> {
   await api.delete(`/products/${id}`);
 }
 
-export async function getInventoryIngredients(): Promise<
-  InventoryIngredient[]
-> {
+export async function getInventoryIngredients(): Promise<InventoryIngredient[]> {
   const res = await api.get<ApiResponse<InventoryIngredient[]>>("/inventory");
   return res.data.data || [];
 }

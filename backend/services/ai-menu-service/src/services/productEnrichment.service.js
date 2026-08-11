@@ -1,3 +1,5 @@
+//enriches those predictions with real product details from the product database.
+
 const axios = require("axios");
 
 const PRODUCT_SERVICE_URL =

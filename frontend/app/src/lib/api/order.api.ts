@@ -5,6 +5,7 @@ import type {
   CreateOrderPayload,
   GetOrdersQuery,
   OrderDto,
+  UpdateOrderPayload,
   UpdateOrderStatusPayload,
 } from "../../types/order";
 
@@ -86,6 +87,19 @@ export async function getPendingPaymentOrders() {
 export async function getOrderById(id: string) {
   try {
     const response = await api.get<ApiResponse<OrderDto>>(`/orders/${id}`);
+    return response.data.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error));
+  }
+}
+
+export async function updateOrder(id: string, payload: UpdateOrderPayload) {
+  try {
+    const response = await api.put<ApiResponse<OrderDto>>(
+      `/orders/${id}`,
+      payload
+    );
+
     return response.data.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error));

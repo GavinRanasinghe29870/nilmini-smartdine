@@ -88,6 +88,12 @@ const generatedMenuSchema = new mongoose.Schema(
 
         predictedQuantity: Number,
         adjustedQuantity: Number,
+
+        /*
+          This is now the live Today Menu quantity.
+          When cashier confirms payment:
+          recommendedProductionQuantity = recommendedProductionQuantity - orderedQuantity
+        */
         recommendedProductionQuantity: Number,
 
         confidence: String,
@@ -101,18 +107,22 @@ const generatedMenuSchema = new mongoose.Schema(
           type: Boolean,
           default: false,
         },
+
         preferenceScore: {
           type: mongoose.Schema.Types.Mixed,
           default: null,
         },
+
         customerPreferenceRank: {
           type: mongoose.Schema.Types.Mixed,
           default: null,
         },
+
         customerPreferenceNote: {
           type: String,
           default: "",
         },
+
         adjustmentReason: {
           type: String,
           default: "",
@@ -134,6 +144,46 @@ const generatedMenuSchema = new mongoose.Schema(
         unit: String,
         requiredQuantity: String,
         relatedProducts: [String],
+      },
+    ],
+
+    inventoryRequirementList: [
+      {
+        ingredientName: String,
+        inventoryItemId: String,
+        inventoryItemName: String,
+
+        requiredQuantityNumber: Number,
+        availableQuantityNumber: Number,
+        shortageQuantityNumber: Number,
+
+        unit: String,
+        requiredQuantity: String,
+        availableQuantity: String,
+        shortageQuantity: String,
+
+        status: String,
+        relatedProducts: [String],
+      },
+    ],
+
+    stockConsumptionHistory: [
+      {
+        orderId: String,
+        orderNumber: String,
+        consumedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        items: [
+          {
+            productId: String,
+            itemId: String,
+            productName: String,
+            quantity: Number,
+            matchedMenuProductName: String,
+          },
+        ],
       },
     ],
 
