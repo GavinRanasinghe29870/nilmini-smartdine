@@ -27,8 +27,8 @@ const inventorySchema = new mongoose.Schema(
     },
     unit: {
       type: String,
-      enum: ["Kg", "Litre", "Piece"],
-      default: "Kg",
+      enum: ["g", "ml", "Piece"],
+      default: "g",
     },
     availability: {
       type: String,

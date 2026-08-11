@@ -157,6 +157,52 @@ function getFinalItemId(
   return `#AI-${String(index + 1).padStart(4, "0")}`;
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return "Failed to generate AI menu";
+}
+
+function getMenuTime(menu: GeneratedAiMenu) {
+  const value = menu.updatedAt || menu.createdAt || menu.approvedAt || "";
+  const time = new Date(value).getTime();
+
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function findMenuByDate(menus: GeneratedAiMenu[], menuDate: string) {
+  return (
+    [...menus]
+      .filter((menu) => menu.menuDate === menuDate)
+      .sort((a, b) => getMenuTime(b) - getMenuTime(a))[0] || null
+  );
+}
+
+function findBestPredictedMenu(menus: GeneratedAiMenu[]) {
+  const tomorrowDate = getColomboDateString(1);
+  const todayDate = getColomboDateString(0);
+
+  const tomorrowMenu = findMenuByDate(menus, tomorrowDate);
+
+  if (tomorrowMenu) {
+    return tomorrowMenu;
+  }
+
+  const todayMenu = findMenuByDate(menus, todayDate);
+
+  if (todayMenu) {
+    return todayMenu;
+  }
+
+  return [...menus].sort((a, b) => getMenuTime(b) - getMenuTime(a))[0] || null;
+}
+
 export default function PredictedMenuPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -191,10 +237,13 @@ export default function PredictedMenuPage() {
         throw new Error(menuResult.message || "Failed to fetch generated menus");
       }
 
-      setSelectedMenu(menuResult.data?.[0] || null);
+      const bestMenu = findBestPredictedMenu(menuResult.data || []);
+
+      setSelectedMenu(bestMenu);
       setProducts(productData || []);
+      setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -205,30 +254,62 @@ export default function PredictedMenuPage() {
       const productData = await getProducts();
       setProducts(productData || []);
     } catch {
-      // keep page usable even if product refresh fails
+      // Keep the generated menu visible even if product refresh fails.
     }
   };
 
   const handleGenerateTomorrowMenu = async () => {
+    const targetDate = getColomboDateString(1);
+
     try {
       setGenerating(true);
       setError("");
 
       const result = await generateAiMenu({
-        predictionDate: getColomboDateString(1),
+        predictionDate: targetDate,
         weatherType: "Normal",
         holiday: "No",
         forceRegenerate: true,
       });
 
-      if (!result.success) {
+      if (!result.success || !result.data) {
         throw new Error(result.message || "Failed to generate AI menu");
       }
 
       setSelectedMenu(result.data);
+      setError("");
+
       await refreshProducts();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      /*
+        Important fix:
+        Sometimes the backend saves the generated menu successfully,
+        but the frontend still receives an error, timeout, or unexpected response.
+        So after a failed generate request, fetch menus again and display the saved menu.
+      */
+      try {
+        const [menuResult, productData] = await Promise.all([
+          getGeneratedAiMenus(),
+          getProducts(),
+        ]);
+
+        if (menuResult.success) {
+          const savedMenu =
+            findMenuByDate(menuResult.data || [], targetDate) ||
+            findBestPredictedMenu(menuResult.data || []);
+
+          if (savedMenu) {
+            setSelectedMenu(savedMenu);
+            setProducts(productData || []);
+            setError("");
+            return;
+          }
+        }
+      } catch {
+        // Show the original generation error below.
+      }
+
+      setError(getErrorMessage(err));
     } finally {
       setGenerating(false);
     }
@@ -251,13 +332,14 @@ export default function PredictedMenuPage() {
 
       const result = await approveGeneratedAiMenu(selectedMenu._id);
 
-      if (!result.success) {
+      if (!result.success || !result.data) {
         throw new Error(result.message || "Failed to approve menu");
       }
 
       setSelectedMenu(result.data);
+      setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(getErrorMessage(err));
     } finally {
       setApproving(false);
     }
@@ -297,7 +379,8 @@ export default function PredictedMenuPage() {
 
       return {
         id: item._id || `${selectedMenu._id}-${index}`,
-        productName: item.productName || matchedProduct?.name || "Unknown Product",
+        productName:
+          item.productName || matchedProduct?.name || "Unknown Product",
         productImage,
         itemId: getFinalItemId(item, matchedProduct, index),
         predictedQuantity,
@@ -427,6 +510,7 @@ export default function PredictedMenuPage() {
   ];
 
   const ingredientList = selectedMenu?.ingredientList || [];
+  const inventoryRequirementList = selectedMenu?.inventoryRequirementList || [];
 
   return (
     <main className="flex-1 p-8">
@@ -434,6 +518,7 @@ export default function PredictedMenuPage() {
         <button
           onClick={() => router.back()}
           className="p-2 rounded-full bg-bg-2 hover:bg-bg-1 transition"
+          type="button"
         >
           <ArrowLeft size={18} />
         </button>
@@ -460,6 +545,7 @@ export default function PredictedMenuPage() {
               ? "bg-primary text-text-black"
               : "text-gray-400 hover:text-gray-200"
           }`}
+          type="button"
         >
           Tomorrow Predicted Menu
         </button>
@@ -471,6 +557,7 @@ export default function PredictedMenuPage() {
               ? "bg-primary text-text-black"
               : "text-gray-400 hover:text-gray-200"
           }`}
+          type="button"
         >
           Today Menu
         </button>
@@ -497,17 +584,22 @@ export default function PredictedMenuPage() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => setIngredientModalOpen(true)}
-            disabled={ingredientList.length === 0}
+            disabled={
+              ingredientList.length === 0 &&
+              inventoryRequirementList.length === 0
+            }
             className="flex items-center gap-2 px-4 py-2 bg-bg-2 text-text-white rounded-lg hover:bg-bg-1 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            type="button"
           >
             <ClipboardList size={16} />
-            Ingredient List
+            Inventory List
           </button>
 
           <button
             onClick={handleGenerateTomorrowMenu}
             disabled={generating}
             className="flex items-center gap-2 px-4 py-2 bg-bg-2 text-text-white rounded-lg hover:bg-bg-1 transition disabled:opacity-60"
+            type="button"
           >
             {generating ? (
               <Loader2 size={16} className="animate-spin" />
@@ -537,6 +629,7 @@ export default function PredictedMenuPage() {
             onClick={handleGenerateTomorrowMenu}
             disabled={generating}
             className="px-4 py-2 bg-primary text-text-black rounded-lg hover:opacity-90 transition disabled:opacity-60"
+            type="button"
           >
             {generating ? "Generating..." : "Generate Tomorrow Menu"}
           </button>
@@ -623,12 +716,13 @@ export default function PredictedMenuPage() {
                 approving || selectedMenu?.status === "approved" || !canApprove
               }
               className="px-4 py-2 bg-primary text-text-black rounded-lg hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed"
+              type="button"
             >
               {selectedMenu?.status === "approved"
                 ? "Menu Approved"
                 : approving
-                ? "Approving..."
-                : "Approve Menu"}
+                  ? "Approving..."
+                  : "Approve Menu"}
             </button>
 
             {!canApprove && (
@@ -645,6 +739,7 @@ export default function PredictedMenuPage() {
         onClose={() => setIngredientModalOpen(false)}
         menuDate={selectedMenu?.menuDate}
         ingredientList={ingredientList}
+        inventoryRequirementList={inventoryRequirementList}
       />
     </main>
   );

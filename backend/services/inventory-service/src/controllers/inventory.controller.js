@@ -21,8 +21,83 @@ function buildImagePath(filename) {
   return `/uploads/${filename}`;
 }
 
+function roundNumber(value) {
+  return Math.round(Number(value || 0) * 1000000) / 1000000;
+}
+
+function normalizeUnit(unit) {
+  const value = String(unit || "")
+    .trim()
+    .toLowerCase();
+
+  if (["kg", "kilogram", "kilograms"].includes(value)) {
+    return {
+      unit: "g",
+      multiplier: 1000,
+    };
+  }
+
+  if (["l", "liter", "litre", "liters", "litres"].includes(value)) {
+    return {
+      unit: "ml",
+      multiplier: 1000,
+    };
+  }
+
+  if (["g", "gram", "grams"].includes(value)) {
+    return {
+      unit: "g",
+      multiplier: 1,
+    };
+  }
+
+  if (["ml", "milliliter", "millilitre", "milliliters", "millilitres"].includes(value)) {
+    return {
+      unit: "ml",
+      multiplier: 1,
+    };
+  }
+
+  return {
+    unit: "Piece",
+    multiplier: 1,
+  };
+}
+
+function normalizeInventoryValues({ quantity, cost, unit }) {
+  const normalized = normalizeUnit(unit);
+  const parsedQuantity = Number(quantity);
+  const parsedCost = Number(cost);
+
+  return {
+    quantity: roundNumber(parsedQuantity * normalized.multiplier),
+    cost: roundNumber(parsedCost / normalized.multiplier),
+    unit: normalized.unit,
+  };
+}
+
+async function migrateLegacyInventoryUnits() {
+  const legacyItems = await InventoryItem.find({ unit: { $in: ["Kg", "Litre"] } });
+
+  for (const item of legacyItems) {
+    const normalized = normalizeInventoryValues({
+      quantity: item.quantity,
+      cost: item.cost,
+      unit: item.unit,
+    });
+
+    item.quantity = normalized.quantity;
+    item.cost = normalized.cost;
+    item.unit = normalized.unit;
+
+    await item.save();
+  }
+}
+
 exports.getAllItems = async (req, res) => {
   try {
+    await migrateLegacyInventoryUnits();
+
     const items = await InventoryItem.find().sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -66,12 +141,18 @@ exports.createItem = async (req, res) => {
       });
     }
 
+    const normalized = normalizeInventoryValues({
+      quantity: parsedQuantity,
+      cost: parsedCost,
+      unit,
+    });
+
     const item = await InventoryItem.create({
       name: name.trim(),
       itemId: await generateUniqueItemId(),
-      cost: parsedCost,
-      quantity: parsedQuantity,
-      unit,
+      cost: normalized.cost,
+      quantity: normalized.quantity,
+      unit: normalized.unit,
       image: req.file ? buildImagePath(req.file.filename) : "",
     });
 
@@ -91,6 +172,8 @@ exports.createItem = async (req, res) => {
 
 exports.updateItem = async (req, res) => {
   try {
+    await migrateLegacyInventoryUnits();
+
     const { id } = req.params;
     const { name, cost, quantity, unit } = req.body;
 
@@ -104,9 +187,18 @@ exports.updateItem = async (req, res) => {
     }
 
     if (name !== undefined) item.name = name.trim();
-    if (cost !== undefined) item.cost = Number(cost);
-    if (quantity !== undefined) item.quantity = Number(quantity);
-    if (unit !== undefined) item.unit = unit;
+
+    if (cost !== undefined || quantity !== undefined || unit !== undefined) {
+      const normalized = normalizeInventoryValues({
+        quantity: quantity !== undefined ? quantity : item.quantity,
+        cost: cost !== undefined ? cost : item.cost,
+        unit: unit !== undefined ? unit : item.unit,
+      });
+
+      item.cost = normalized.cost;
+      item.quantity = normalized.quantity;
+      item.unit = normalized.unit;
+    }
 
     if (req.file) {
       item.image = buildImagePath(req.file.filename);
@@ -130,6 +222,8 @@ exports.updateItem = async (req, res) => {
 
 exports.addQuantity = async (req, res) => {
   try {
+    await migrateLegacyInventoryUnits();
+
     const { id } = req.params;
     const { quantityToAdd } = req.body;
 

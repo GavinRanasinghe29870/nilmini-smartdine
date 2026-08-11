@@ -1,23 +1,24 @@
 const mongoose = require("mongoose");
 
-const salaryPaymentSchema = new mongoose.Schema(
+const staffExpenseSchema = new mongoose.Schema(
   {
     staffId: {
       type: String,
       required: true,
       index: true,
+      trim: true,
     },
 
     staffName: {
       type: String,
-      default: "",
+      required: true,
       trim: true,
     },
 
     role: {
       type: String,
-      default: "STAFF",
-      trim: true,
+      enum: ["OWNER", "MANAGER", "CASHIER", "WAITER", "STAFF"],
+      required: true,
     },
 
     baseSalary: {
@@ -35,11 +36,34 @@ const salaryPaymentSchema = new mongoose.Schema(
     currency: {
       type: String,
       default: "LKR",
+      enum: ["LKR"],
+    },
+
+    expenseType: {
+      type: String,
+      enum: [
+        "Salary Payment",
+        "Salary Advance",
+        "Medical",
+        "Emergency",
+        "Transport",
+        "Food",
+        "Other",
+      ],
+      default: "Salary Payment",
+      required: true,
+      index: true,
+    },
+
+    deductFromSalary: {
+      type: Boolean,
+      default: false,
     },
 
     paymentMonth: {
       type: String,
       required: true,
+      trim: true,
       index: true,
     },
 
@@ -55,7 +79,7 @@ const salaryPaymentSchema = new mongoose.Schema(
       trim: true,
     },
 
-    paidBy: {
+    createdBy: {
       id: { type: String, default: "" },
       fullName: { type: String, default: "" },
       role: { type: String, default: "" },
@@ -64,4 +88,4 @@ const salaryPaymentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("SalaryPayment", salaryPaymentSchema);
+module.exports = mongoose.model("StaffExpense", staffExpenseSchema);

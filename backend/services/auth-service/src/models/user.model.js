@@ -3,10 +3,26 @@ const mongoose = require("mongoose");
 const userSchema = new mongoose.Schema(
   {
     fullName: { type: String, trim: true, default: "" },
-    email: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
-    username: { type: String, trim: true, unique: true, sparse: true },
 
-    password: { type: String, required: true }, // hashed
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      unique: true,
+      sparse: true,
+    },
+
+    username: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
+
+    password: {
+      type: String,
+      required: true,
+    },
 
     role: {
       type: String,
@@ -22,6 +38,12 @@ const userSchema = new mongoose.Schema(
     shiftEnd: { type: String, default: "" },
     address: { type: String, default: "" },
     additionalDetails: { type: String, default: "" },
+
+    image: {
+      type: String,
+      trim: true,
+      default: "",
+    },
 
     tokenVersion: { type: Number, default: 0 },
   },

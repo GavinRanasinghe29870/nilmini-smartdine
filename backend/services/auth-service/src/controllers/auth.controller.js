@@ -12,6 +12,23 @@ const cookieOptions = {
   path: "/",
 };
 
+function clearAuthCookies(res) {
+  res.clearCookie("accessToken", cookieOptions);
+  res.clearCookie("refreshToken", cookieOptions);
+}
+
+function cleanString(value) {
+  return String(value || "").trim();
+}
+
+function normalizePhone(value) {
+  return cleanString(value).replace(/[^0-9+]/g, "");
+}
+
+function createTemporaryPassword() {
+  return `Nilmini@${crypto.randomInt(100000, 999999)}`;
+}
+
 exports.login = async (req, res) => {
   try {
     const { emailOrUsername, password } = req.body;
@@ -31,6 +48,7 @@ exports.login = async (req, res) => {
     }
 
     const ok = await bcrypt.compare(password, user.password);
+
     if (!ok) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
@@ -53,6 +71,7 @@ exports.login = async (req, res) => {
     });
 
     return res.json({
+      message: "Login successful",
       user: {
         id: String(user._id),
         role: user.role,
@@ -63,6 +82,49 @@ exports.login = async (req, res) => {
     });
   } catch (e) {
     console.error("LOGIN ERROR:", e);
+    return res.status(500).json({ message: e.message || "Server error" });
+  }
+};
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const email = cleanString(req.body?.email).toLowerCase();
+    const phone = cleanString(req.body?.phone);
+    const username = cleanString(req.body?.username);
+
+    if (!email || !phone || !username) {
+      return res.status(400).json({
+        message: "Email, phone number, and username are required",
+      });
+    }
+
+    const user = await User.findOne({
+      email,
+      username,
+    });
+
+    if (!user || normalizePhone(user.phone) !== normalizePhone(phone)) {
+      return res.status(404).json({
+        message:
+          "No matching account found. Please check the email, phone number, and username.",
+      });
+    }
+
+    const temporaryPassword = createTemporaryPassword();
+    const salt = await bcrypt.genSalt(10);
+
+    user.password = await bcrypt.hash(temporaryPassword, salt);
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
+
+    await user.save();
+
+    return res.json({
+      message:
+        "Account details matched. A temporary password was created successfully.",
+      temporaryPassword,
+    });
+  } catch (e) {
+    console.error("FORGOT PASSWORD ERROR:", e);
     return res.status(500).json({ message: e.message || "Server error" });
   }
 };
@@ -82,27 +144,36 @@ exports.verify = async (req, res) => {
 exports.refresh = async (req, res) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
+
     if (!refreshToken) {
+      clearAuthCookies(res);
       return res.status(401).json({ message: "Missing refresh token" });
     }
 
     const payload = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
 
     if (payload.type !== "refresh" || !payload.sid) {
+      clearAuthCookies(res);
       return res.status(401).json({ message: "Invalid refresh token" });
     }
 
     const sessionUserId = await redis.get(`session:${payload.sid}`);
+
     if (!sessionUserId || String(sessionUserId) !== String(payload.sub)) {
+      clearAuthCookies(res);
       return res.status(401).json({ message: "Session revoked" });
     }
 
     const user = await User.findById(sessionUserId);
+
     if (!user) {
+      clearAuthCookies(res);
       return res.status(401).json({ message: "User not found" });
     }
 
     if ((user.tokenVersion ?? 0) !== (payload.tokenVersion ?? 0)) {
+      await redis.del(`session:${payload.sid}`);
+      clearAuthCookies(res);
       return res.status(401).json({ message: "Session revoked" });
     }
 
@@ -113,8 +184,9 @@ exports.refresh = async (req, res) => {
       maxAge: 15 * 60 * 1000,
     });
 
-    return res.json({ message: "refreshed" });
-  } catch (e) {
+    return res.json({ message: "Token refreshed" });
+  } catch {
+    clearAuthCookies(res);
     return res.status(401).json({ message: "Invalid refresh token" });
   }
 };
@@ -122,21 +194,49 @@ exports.refresh = async (req, res) => {
 exports.logout = async (req, res) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
+    const accessToken = req.cookies?.accessToken;
+
+    let sessionId = null;
 
     if (refreshToken) {
       try {
-        const payload = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-        if (payload.sid) {
-          await redis.del(`session:${payload.sid}`);
+        const payload = jwt.verify(
+          refreshToken,
+          process.env.REFRESH_TOKEN_SECRET
+        );
+
+        if (payload?.sid) {
+          sessionId = payload.sid;
         }
-      } catch (_) {}
+      } catch {
+      }
     }
 
-    res.clearCookie("accessToken", cookieOptions);
-    res.clearCookie("refreshToken", cookieOptions);
+    if (!sessionId && accessToken) {
+      try {
+        const payload = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
 
-    return res.json({ message: "logged out" });
+        if (payload?.sid) {
+          sessionId = payload.sid;
+        }
+      } catch {
+      }
+    }
+
+    if (sessionId) {
+      await redis.del(`session:${sessionId}`);
+    }
+
+    clearAuthCookies(res);
+
+    return res.status(200).json({
+      message: "Logged out successfully",
+    });
   } catch (e) {
-    return res.status(500).json({ message: e.message });
+    clearAuthCookies(res);
+
+    return res.status(500).json({
+      message: e.message || "Logout failed",
+    });
   }
 };

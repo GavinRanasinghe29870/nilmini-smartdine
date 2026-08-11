@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -9,6 +10,7 @@ import {
   Pencil,
   Trash2,
   Banknote,
+  HandCoins,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -16,27 +18,17 @@ import DataTable, { Column } from "../../src/components/DataTable";
 import AddStaffModal from "./AddStaffModal";
 import EditStaffModal from "./EditStaffModal";
 import PaySalaryModal from "./PaySalaryModal";
+import AddStaffExpenseModal from "./AddStaffExpenseModal";
 
-import type { Staff } from "../../src/types/staff";
-import { getAllStaff } from "../../src/lib/api/staff.api";
+import type { Staff, StaffRole } from "../../src/types/staff";
+import {
+  deleteStaff,
+  getAllStaff,
+  getStaffImageSrc,
+} from "../../src/lib/api/staff.api";
 import { verify } from "../../src/lib/auth";
 
 const STAFF_PANEL_ROLES = ["OWNER", "MANAGER"];
-
-type UIStaff = {
-  id: string;
-  name: string;
-  role: string;
-  email: string;
-  phone: string;
-  dob: string;
-  salary: number;
-  startTime: string;
-  endTime: string;
-  address: string;
-  additional: string;
-  image?: string;
-};
 
 function formatLkr(value: number) {
   return `LKR ${Number(value || 0).toLocaleString("en-LK", {
@@ -45,35 +37,38 @@ function formatLkr(value: number) {
   })}`;
 }
 
+function staffIdOf(staff: Staff) {
+  return staff._id || staff.id || "";
+}
+
+function isProtectedRole(role?: string) {
+  return role === "OWNER" || role === "MANAGER";
+}
+
 export default function StaffManagementPage() {
   const router = useRouter();
 
   const [openAddStaff, setOpenAddStaff] = useState(false);
-  const [editingStaff, setEditingStaff] = useState<UIStaff | null>(null);
-  const [payingStaff, setPayingStaff] = useState<UIStaff | null>(null);
+  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [payingStaff, setPayingStaff] = useState<Staff | null>(null);
+  const [expenseStaff, setExpenseStaff] = useState<Staff | null>(null);
 
-  const [staffList, setStaffList] = useState<UIStaff[]>([]);
+  const [currentUserRole, setCurrentUserRole] = useState<StaffRole>("STAFF");
+  const [currentUserId, setCurrentUserId] = useState("");
+
+  const [staffList, setStaffList] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [allowed, setAllowed] = useState(false);
+  const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  function toUIStaff(u: Staff): UIStaff {
-    const id = u._id || u.id || "";
+  const isOwner = currentUserRole === "OWNER";
+  const isManager = currentUserRole === "MANAGER";
 
-    return {
-      id,
-      name: u.fullName || "",
-      role: u.role || "STAFF",
-      email: u.email || "",
-      phone: u.phone || "",
-      dob: u.dob || "",
-      salary: u.salary ?? 0,
-      startTime: u.shiftStart || "",
-      endTime: u.shiftEnd || "",
-      address: u.address || "",
-      additional: u.additionalDetails || "",
-    };
+  function canManageStaff(staff: Staff) {
+    if (isOwner) return true;
+    if (isManager && isProtectedRole(staff.role)) return false;
+    return true;
   }
 
   async function loadStaff() {
@@ -82,12 +77,48 @@ export default function StaffManagementPage() {
       setError("");
 
       const list = await getAllStaff();
-      setStaffList(list.map(toUIStaff));
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Failed to load staff";
-      setError(message);
+      setStaffList(list);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load staff");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDeleteStaff(staff: Staff) {
+    const id = staffIdOf(staff);
+
+    if (!id) {
+      setError("Staff ID is missing");
+      return;
+    }
+
+    if (!canManageStaff(staff)) {
+      setError("Managers cannot delete Owner or Manager staff accounts");
+      return;
+    }
+
+    if (id === currentUserId) {
+      setError("You cannot delete your own account");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${staff.fullName}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setError("");
+      setSuccess("");
+
+      await deleteStaff(id);
+
+      setSuccess("Staff member deleted successfully");
+      await loadStaff();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete staff");
     }
   }
 
@@ -98,13 +129,18 @@ export default function StaffManagementPage() {
         setError("");
 
         const data = await verify();
+        const role = data?.user?.role as StaffRole;
+        const id = data?.user?.id || "";
 
-        if (!STAFF_PANEL_ROLES.includes(data?.user?.role)) {
+        if (!STAFF_PANEL_ROLES.includes(role)) {
           router.replace("/login");
           return;
         }
 
+        setCurrentUserRole(role);
+        setCurrentUserId(id);
         setAllowed(true);
+
         await loadStaff();
       } catch {
         router.replace("/login");
@@ -114,28 +150,53 @@ export default function StaffManagementPage() {
     init();
   }, [router]);
 
-  const staffColumns: Column<UIStaff>[] = [
-    { key: "id", label: "ID", render: (r) => `#${r.id.slice(-6)}` },
+  const staffColumns: Column<Staff>[] = [
+    {
+      key: "id",
+      label: "ID",
+      render: (staff) => `#${staffIdOf(staff).slice(-6)}`,
+    },
     {
       key: "name",
       label: "Name",
-      render: (r) => (
-        <div>
-          <p className="font-medium text-white">{r.name}</p>
-          <p className="text-xs text-primary">{r.role}</p>
+      render: (staff) => (
+        <div className="flex items-center gap-3">
+          <img
+            src={getStaffImageSrc(staff.image)}
+            alt={staff.fullName}
+            className="w-11 h-11 rounded-full object-cover border border-white/10 bg-bg-1"
+            onError={(event) => {
+              event.currentTarget.src = "/AddImage.png";
+            }}
+          />
+
+          <div className="min-w-0">
+            <p className="font-medium text-white truncate">
+              {staff.fullName}
+            </p>
+            <p className="text-xs text-primary">{staff.role}</p>
+          </div>
         </div>
       ),
     },
-    { key: "email", label: "Email", render: (r) => r.email || "-" },
-    { key: "phone", label: "Phone", render: (r) => r.phone || "-" },
+    {
+      key: "email",
+      label: "Email",
+      render: (staff) => staff.email || "-",
+    },
+    {
+      key: "phone",
+      label: "Phone",
+      render: (staff) => staff.phone || "-",
+    },
     {
       key: "age",
       label: "Age",
-      render: (r) => {
-        if (!r.dob) return "-";
+      render: (staff) => {
+        if (!staff.dob) return "-";
 
         const age = Math.floor(
-          (Date.now() - new Date(r.dob).getTime()) /
+          (Date.now() - new Date(staff.dob).getTime()) /
             (365.25 * 24 * 60 * 60 * 1000)
         );
 
@@ -145,51 +206,78 @@ export default function StaffManagementPage() {
     {
       key: "salary",
       label: "Salary",
-      render: (r) => formatLkr(r.salary),
+      render: (staff) => formatLkr(staff.salary || 0),
     },
     {
       key: "time",
       label: "Timings",
-      render: (r) => {
-        if (!r.startTime && !r.endTime) return "-";
-        return `${r.startTime || ""} to ${r.endTime || ""}`;
+      render: (staff) => {
+        if (!staff.shiftStart && !staff.shiftEnd) return "-";
+        return `${staff.shiftStart || "-"} to ${staff.shiftEnd || "-"}`;
       },
     },
     {
       key: "actions",
       label: "",
       align: "right",
-      render: (row) => (
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={() => router.push(`/staffManagement/${row.id}`)}
-            className="text-primary hover:opacity-80"
-            title="View staff"
-          >
-            <Eye size={16} />
-          </button>
+      render: (staff) => {
+        const canManage = canManageStaff(staff);
 
-          <button
-            onClick={() => setEditingStaff(row)}
-            className="text-gray-400 hover:text-white"
-            title="Edit staff"
-          >
-            <Pencil size={16} />
-          </button>
+        return (
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() =>
+                router.push(`/staffManagement/${staffIdOf(staff)}`)
+              }
+              className="text-primary hover:opacity-80"
+              title="View staff"
+              type="button"
+            >
+              <Eye size={16} />
+            </button>
 
-          <button
-            onClick={() => setPayingStaff(row)}
-            className="text-green-400 hover:text-green-300"
-            title="Pay salary"
-          >
-            <Banknote size={16} />
-          </button>
+            {canManage && (
+              <>
+                <button
+                  onClick={() => setEditingStaff(staff)}
+                  className="text-gray-400 hover:text-white"
+                  title="Edit staff"
+                  type="button"
+                >
+                  <Pencil size={16} />
+                </button>
 
-          <button className="text-red-500 hover:text-red-400" title="Delete">
-            <Trash2 size={16} />
-          </button>
-        </div>
-      ),
+                <button
+                  onClick={() => setPayingStaff(staff)}
+                  className="text-green-400 hover:text-green-300"
+                  title="Pay salary"
+                  type="button"
+                >
+                  <Banknote size={16} />
+                </button>
+
+                <button
+                  onClick={() => setExpenseStaff(staff)}
+                  className="text-yellow-400 hover:text-yellow-300"
+                  title="Add staff expense / advance"
+                  type="button"
+                >
+                  <HandCoins size={16} />
+                </button>
+
+                <button
+                  onClick={() => handleDeleteStaff(staff)}
+                  className="text-red-500 hover:text-red-400"
+                  title="Delete"
+                  type="button"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -209,9 +297,11 @@ export default function StaffManagementPage() {
         <button
           onClick={() => router.back()}
           className="p-2 rounded-full bg-bg-2 hover:bg-bg-1"
+          type="button"
         >
           <ArrowLeft size={18} />
         </button>
+
         <h1 className="text-h4 font-semibold">Staff Management</h1>
       </div>
 
@@ -224,25 +314,33 @@ export default function StaffManagementPage() {
           <button
             onClick={() => setOpenAddStaff(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-black rounded-lg"
+            type="button"
           >
             <Plus size={18} />
             Add Staff
           </button>
 
-          <button className="flex items-center gap-2 px-4 py-2 bg-bg-2 rounded-lg text-sm">
+          <button
+            className="flex items-center gap-2 px-4 py-2 bg-bg-2 rounded-lg text-sm"
+            type="button"
+          >
             Sort by <ChevronDown size={14} />
           </button>
         </div>
       </div>
 
       <div className="flex gap-4 mb-6">
-        <button className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-black">
+        <button
+          className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-black"
+          type="button"
+        >
           Staff Management
         </button>
 
         <button
           onClick={() => router.push("/staffManagement/attendance")}
           className="px-4 py-2 rounded-md text-sm font-medium text-gray-400 hover:text-gray-200"
+          type="button"
         >
           Attendance
         </button>
@@ -252,16 +350,18 @@ export default function StaffManagementPage() {
       {success && <p className="text-green-400 mb-4">{success}</p>}
 
       {loading ? (
-        <p className="text-gray-400">Loading...</p>
+        <p className="text-gray-400">Loading staff members...</p>
       ) : (
         <DataTable columns={staffColumns} data={staffList} />
       )}
 
       <AddStaffModal
         open={openAddStaff}
+        currentUserRole={currentUserRole}
         onClose={() => setOpenAddStaff(false)}
         onCreated={() => {
           setOpenAddStaff(false);
+          setSuccess("Staff member created successfully");
           loadStaff();
         }}
       />
@@ -269,16 +369,41 @@ export default function StaffManagementPage() {
       <EditStaffModal
         open={!!editingStaff}
         staff={editingStaff}
+        currentUserRole={currentUserRole}
         onClose={() => setEditingStaff(null)}
+        onUpdated={() => {
+          setEditingStaff(null);
+          setSuccess("Staff member updated successfully");
+          loadStaff();
+        }}
       />
 
       <PaySalaryModal
         open={!!payingStaff}
-        staff={payingStaff}
+        staff={
+          payingStaff
+            ? {
+                id: staffIdOf(payingStaff),
+                name: payingStaff.fullName,
+                role: payingStaff.role,
+                salary: payingStaff.salary || 0,
+              }
+            : null
+        }
         onClose={() => setPayingStaff(null)}
         onPaid={() => {
           setSuccess("Salary payment recorded successfully");
           setPayingStaff(null);
+        }}
+      />
+
+      <AddStaffExpenseModal
+        open={!!expenseStaff}
+        staff={expenseStaff}
+        onClose={() => setExpenseStaff(null)}
+        onCreated={() => {
+          setExpenseStaff(null);
+          setSuccess("Staff expense recorded successfully");
         }}
       />
     </main>

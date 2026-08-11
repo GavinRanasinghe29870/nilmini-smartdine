@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { InventoryItem, UnitType } from "../../src/types/inventory";
+import { normalizeInventoryUnit } from "../../src/types/inventory";
 
 type Props = {
   open: boolean;
@@ -28,7 +29,7 @@ export default function EditItemModal({ open, item, onClose, onSave }: Props) {
   const [itemName, setItemName] = useState("");
   const [cost, setCost] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [unit, setUnit] = useState<UnitType>("Kg");
+  const [unit, setUnit] = useState<UnitType>("g");
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [saving, setSaving] = useState(false);
@@ -39,7 +40,7 @@ export default function EditItemModal({ open, item, onClose, onSave }: Props) {
       setItemName(item.name);
       setCost(String(item.cost));
       setQuantity(String(item.quantity));
-      setUnit(item.unit);
+      setUnit(normalizeInventoryUnit(item.unit));
       setPreview(item.image || "");
       setImage(null);
       setSaving(false);
@@ -149,7 +150,7 @@ export default function EditItemModal({ open, item, onClose, onSave }: Props) {
         </div>
 
         <div className="mb-4">
-          <label className="block mb-2 text-sm">Cost</label>
+          <label className="block mb-2 text-sm">Cost per selected unit (LKR)</label>
           <input
             type="number"
             min="0"
@@ -177,8 +178,8 @@ export default function EditItemModal({ open, item, onClose, onSave }: Props) {
             onChange={(e) => setUnit(e.target.value as UnitType)}
             className="w-full px-4 py-3 rounded-lg bg-bg-1 text-text-white focus:outline-none"
           >
-            <option value="Kg">Kg</option>
-            <option value="Litre">Litre</option>
+            <option value="g">g</option>
+            <option value="ml">ml</option>
             <option value="Piece">Piece</option>
           </select>
         </div>

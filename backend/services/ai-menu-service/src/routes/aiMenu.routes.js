@@ -1,17 +1,16 @@
-const express = require("express");
+const router = require("express").Router();
 
+const aiMenuController = require("../controllers/aiMenu.controller");
 const {
-  generateMenu,
-  getGeneratedMenus,
-  getTodayMenu,
-  approveGeneratedMenu,
-} = require("../controllers/aiMenu.controller");
+  consumeTodayMenuStock,
+} = require("../controllers/aiMenuStock.controller");
 
-const router = express.Router();
+router.post("/generate", aiMenuController.generateMenu);
+router.get("/", aiMenuController.getGeneratedMenus);
+router.get("/today", aiMenuController.getTodayMenu);
 
-router.post("/generate", generateMenu);
-router.get("/today", getTodayMenu);
-router.get("/", getGeneratedMenus);
-router.patch("/:id/approve", approveGeneratedMenu);
+router.patch("/today/consume-stock", consumeTodayMenuStock);
+
+router.patch("/:id/approve", aiMenuController.approveGeneratedMenu);
 
 module.exports = router;

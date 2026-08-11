@@ -1,7 +1,6 @@
-const AUTH_BASE = (process.env.AUTH_SERVICE_URL || "http://localhost:5001").replace(
-  /\/$/,
-  ""
-);
+const AUTH_BASE = (
+  process.env.AUTH_SERVICE_URL || "http://localhost:5001"
+).replace(/\/$/, "");
 
 async function callAuth(path, { method = "GET", cookie, body } = {}) {
   const res = await fetch(`${AUTH_BASE}${path}`, {
@@ -48,5 +47,18 @@ exports.getStaffList = ({ cookie }) =>
 exports.getStaffById = ({ cookie, id }) =>
   callAuth(`/api/staff/${id}`, {
     method: "GET",
+    cookie,
+  });
+
+exports.updateStaff = ({ cookie, id, payload }) =>
+  callAuth(`/api/staff/${id}`, {
+    method: "PUT",
+    cookie,
+    body: payload,
+  });
+
+exports.deleteStaff = ({ cookie, id }) =>
+  callAuth(`/api/staff/${id}`, {
+    method: "DELETE",
     cookie,
   });

@@ -22,11 +22,21 @@ export default function WelcomeSection() {
         onError={(e) => console.error("Hero video failed to load", e)}
       />
 
+      {/* Login Button */}
+      <Link
+        href="/login"
+        className="absolute top-5 right-6 z-30 flex items-center justify-center w-10 h-10 rounded-full bg-white/50 border border-white/80 shadow-md backdrop-blur-md hover:bg-white/90 transition"
+        title="Login"
+      >
+        <img
+          src="/icons8-user-login-24.png"
+          alt="Login"
+          className="w-5 h-5"
+        />
+      </Link>
+
       {/* Blur Layer */}
       <div className="absolute inset-0 z-10 bg-black/20 backdrop-blur-[2px]" />
-
-      {/* Left Dark Gradient for Text Visibility */}
-      {/* <div className="absolute inset-0 z-10 bg-gradient-to-r from-black/80 via-black/45 to-transparent" /> */}
 
       {/* Content */}
       <div className="relative z-20 max-w-3xl px-12">

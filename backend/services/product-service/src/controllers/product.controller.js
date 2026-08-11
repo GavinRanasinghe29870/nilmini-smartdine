@@ -1,6 +1,13 @@
 const Category = require("../models/category.model");
 const Product = require("../models/product.model");
 
+const NO_INGREDIENTS_MARKERS = new Set([
+  "__no_ingredients__",
+  "no ingredient",
+  "no ingredients",
+  "none",
+]);
+
 function normalizeImagePath(image = "") {
   const value = String(image || "").trim();
 
@@ -24,16 +31,114 @@ function normalizeImagePath(image = "") {
   return value;
 }
 
+function isNoIngredientsMarker(name) {
+  const value = String(name || "")
+    .trim()
+    .toLowerCase();
+
+  return NO_INGREDIENTS_MARKERS.has(value);
+}
+
+function roundNumber(value) {
+  return Math.round(Number(value || 0) * 1000000) / 1000000;
+}
+
+function formatQuantity(value) {
+  if (!Number.isFinite(value)) return "";
+  return String(roundNumber(value));
+}
+
+function normalizeIngredientUnit(unit) {
+  const value = String(unit || "")
+    .trim()
+    .toLowerCase();
+
+  if (["kg", "kilogram", "kilograms"].includes(value)) {
+    return {
+      unit: "g",
+      multiplier: 1000,
+    };
+  }
+
+  if (["l", "liter", "litre", "liters", "litres"].includes(value)) {
+    return {
+      unit: "ml",
+      multiplier: 1000,
+    };
+  }
+
+  if (["g", "gram", "grams"].includes(value)) {
+    return {
+      unit: "g",
+      multiplier: 1,
+    };
+  }
+
+  if (["ml", "milliliter", "millilitre", "milliliters", "millilitres"].includes(value)) {
+    return {
+      unit: "ml",
+      multiplier: 1,
+    };
+  }
+
+  if (["piece", "pieces", "pcs", "pc", "unit", "units"].includes(value)) {
+    return {
+      unit: "Piece",
+      multiplier: 1,
+    };
+  }
+
+  return {
+    unit: String(unit || "g").trim() || "g",
+    multiplier: 1,
+  };
+}
+
+function normalizeIngredientQuantityAndUnit(quantity, unit) {
+  const normalized = normalizeIngredientUnit(unit);
+  const quantityText = String(quantity || "").trim();
+  const parsedQuantity = Number(quantityText);
+
+  return {
+    quantity: Number.isFinite(parsedQuantity)
+      ? formatQuantity(parsedQuantity * normalized.multiplier)
+      : quantityText,
+    unit: normalized.unit,
+  };
+}
+
 function sanitizeIngredients(ingredients = []) {
   if (!Array.isArray(ingredients)) return [];
 
   return ingredients
-    .filter((item) => item && String(item.name || "").trim())
-    .map((item) => ({
-      name: String(item.name || "").trim(),
-      quantity: String(item.quantity || "").trim(),
-      unit: String(item.unit || "g").trim() || "g",
-    }));
+    .filter((item) => {
+      if (!item) return false;
+      const name = String(item.name || "").trim();
+      return name && !isNoIngredientsMarker(name);
+    })
+    .map((item) => {
+      const normalized = normalizeIngredientQuantityAndUnit(
+        item.quantity,
+        item.unit || "g"
+      );
+
+      return {
+        name: String(item.name || "").trim(),
+        quantity: normalized.quantity,
+        unit: normalized.unit,
+      };
+    });
+}
+
+async function migrateLegacyProductIngredientUnits() {
+  const products = await Product.find({
+    "ingredients.unit": { $in: ["Kg", "kg", "Litre", "litre", "Liter", "liter"] },
+  });
+
+  for (const product of products) {
+    product.ingredients = sanitizeIngredients(product.ingredients || []);
+    await product.save();
+  }
 }
 
 function sanitizeProductType(productType) {
@@ -75,7 +180,7 @@ function mapProduct(product) {
     price: product.price,
     availability: product.availability,
     image: normalizeImagePath(product.image),
-    ingredients: product.ingredients || [],
+    ingredients: sanitizeIngredients(product.ingredients || []),
     productType: product.productType || "prepared_food",
     includeInAiMenu:
       typeof product.includeInAiMenu === "boolean"
@@ -125,6 +230,8 @@ exports.uploadImage = async (req, res) => {
 
 exports.getProducts = async (req, res) => {
   try {
+    await migrateLegacyProductIngredientUnits();
+
     const products = await Product.find()
       .populate("category", "name")
       .sort({ createdAt: -1 })

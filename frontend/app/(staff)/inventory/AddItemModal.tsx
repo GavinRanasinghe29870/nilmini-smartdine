@@ -27,7 +27,7 @@ export default function AddItemModal({ open, onClose, onSave }: Props) {
   const [itemName, setItemName] = useState("");
   const [cost, setCost] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [unit, setUnit] = useState<UnitType>("Kg");
+  const [unit, setUnit] = useState<UnitType>("g");
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [saving, setSaving] = useState(false);
@@ -38,7 +38,7 @@ export default function AddItemModal({ open, onClose, onSave }: Props) {
       setItemName("");
       setCost("");
       setQuantity("");
-      setUnit("Kg");
+      setUnit("g");
       setImage(null);
       setPreview("");
       setSaving(false);
@@ -151,7 +151,9 @@ export default function AddItemModal({ open, onClose, onSave }: Props) {
         </div>
 
         <div className="mb-4">
-          <label className="text-sm text-gray-400 block mb-1">Cost</label>
+          <label className="text-sm text-gray-400 block mb-1">
+            Cost per selected unit (LKR)
+          </label>
           <input
             type="number"
             min="0"
@@ -179,8 +181,8 @@ export default function AddItemModal({ open, onClose, onSave }: Props) {
             onChange={(e) => setUnit(e.target.value as UnitType)}
             className="w-full px-4 py-3 rounded-lg bg-bg-1 text-text-white outline-none"
           >
-            <option value="Kg">Kg</option>
-            <option value="Litre">Litre</option>
+            <option value="g">g</option>
+            <option value="ml">ml</option>
             <option value="Piece">Piece</option>
           </select>
         </div>

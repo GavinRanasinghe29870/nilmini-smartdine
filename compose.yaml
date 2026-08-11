@@ -141,8 +141,11 @@ services:
     environment:
       PORT: 5002
       AUTH_SERVICE_URL: http://auth-service:5001
+      FRONTEND_UPLOAD_DIR: /shared/frontend-uploads
       FRONTEND_ORIGIN: http://localhost:3000
       CLIENT_ORIGIN: http://localhost:3000
+    volumes:
+      - ./frontend/public/uploads:/shared/frontend-uploads
     ports:
       - "5002:5002"
     depends_on:
@@ -231,6 +234,7 @@ services:
       - ./backend/services/order-service/.env
     environment:
       PORT: 5006
+      AI_MENU_SERVICE_URL: http://ai-menu-service:5005
       FRONTEND_ORIGIN: http://localhost:3000
       CLIENT_ORIGIN: http://localhost:3000
     ports:

@@ -1,4 +1,5 @@
-export type UnitType = "Kg" | "Litre" | "Piece";
+export type UnitType = "g" | "ml" | "Piece";
+export type LegacyUnitType = UnitType | "Kg" | "Litre" | string;
 
 export type InventoryItem = {
   id: string;
@@ -19,7 +20,7 @@ export type InventoryApiItem = {
   itemId: string;
   quantity: number;
   cost: number;
-  unit: UnitType;
+  unit: LegacyUnitType;
   availability: "In Stock" | "Out of Stock";
   image: string;
   createdAt?: string;
@@ -32,13 +33,42 @@ export type ApiResponse<T> = {
   data: T;
 };
 
+export function normalizeInventoryUnit(unit?: LegacyUnitType): UnitType {
+  const value = String(unit || "")
+    .trim()
+    .toLowerCase();
+
+  if (["kg", "kilogram", "kilograms", "g", "gram", "grams"].includes(value)) {
+    return "g";
+  }
+
+  if (
+    [
+      "l",
+      "liter",
+      "litre",
+      "liters",
+      "litres",
+      "ml",
+      "milliliter",
+      "millilitre",
+      "milliliters",
+      "millilitres",
+    ].includes(value)
+  ) {
+    return "ml";
+  }
+
+  return "Piece";
+}
+
 export const mapInventoryItem = (item: InventoryApiItem): InventoryItem => ({
   id: item._id,
   name: item.name,
   itemId: item.itemId,
   quantity: item.quantity,
   cost: item.cost,
-  unit: item.unit,
+  unit: normalizeInventoryUnit(item.unit),
   availability: item.availability,
   image: item.image,
   createdAt: item.createdAt,

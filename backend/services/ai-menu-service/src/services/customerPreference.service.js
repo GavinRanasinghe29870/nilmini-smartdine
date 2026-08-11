@@ -1,3 +1,6 @@
+//predicts which customer age group is likely to visit and which foods that group prefers. 
+// The AI menu then increases quantities for preferred products.
+
 const axios = require("axios");
 const { addDays } = require("./date.service");
 
